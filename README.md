@@ -68,6 +68,12 @@ For a physical device, `localhost` points to the device itself. Create an ignore
 EXPO_PUBLIC_API_URL=http://192.168.1.10:5000
 ```
 
+The chat Socket.IO server defaults to the same host on port `5001`. If it runs on
+a different host, set `EXPO_PUBLIC_CHAT_URL` to its base URL (for example,
+`http://192.168.1.10:5001`).
+For browser clients, the Socket.IO auth guard must also accept the `accessToken`
+value from `client.handshake.auth`; browsers cannot set a custom Cookie header.
+
 Restart Expo after changing local environment files. Build with
 `npx eas-cli build --profile development` for development or
 `npx eas-cli build --profile production` for production.

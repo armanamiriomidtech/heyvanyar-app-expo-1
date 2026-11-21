@@ -17,14 +17,26 @@ import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import { getAuthErrorMessage, normalizePhone } from '@/features/auth/api';
 import { PhoneInput } from '@/features/auth/components/PhoneInput';
+import { getLoginReturnParams } from '@/features/auth/returnRoute';
 import { useSendOtp } from '@/features/auth/useSendOtp';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { HttpError } from '@/services/http';
 
 export default function LoginScreen() {
-  const { returnTo: rawReturnTo } = useLocalSearchParams<{ returnTo?: string }>();
-  const returnToAds = rawReturnTo === 'ads';
-  const returnToAdStageThree = rawReturnTo === 'ad-stage-three';
+  const {
+    returnTo: rawReturnTo,
+    adShortLink: rawAdShortLink,
+    pvId: rawPvId,
+  } = useLocalSearchParams<{
+    returnTo?: string;
+    adShortLink?: string;
+    pvId?: string;
+  }>();
+  const returnParams = getLoginReturnParams({
+    returnTo: rawReturnTo,
+    adShortLink: rawAdShortLink,
+    pvId: rawPvId,
+  });
   const [phone, setPhone] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -50,8 +62,7 @@ export default function LoginScreen() {
         pathname: '/(auth)/verify',
         params: {
           phone: normalizedPhone,
-          ...(returnToAds ? { returnTo: 'ads' } : {}),
-          ...(returnToAdStageThree ? { returnTo: 'ad-stage-three' } : {}),
+          ...returnParams,
         },
       });
     } catch (error) {

@@ -21,7 +21,15 @@ const authSessionSchema = z.union([
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 export type AuthSession = z.infer<typeof authSessionSchema>;
-export type PostLoginRoute = '/(tabs)/ads' | '/ad-stage-three';
+export type PostLoginRoute =
+  | '/(tabs)/ads'
+  | '/(tabs)/chat'
+  | '/ad-stage-three'
+  | { pathname: '/chat/new/[shortLink]'; params: { shortLink: string } }
+  | {
+      pathname: '/chat/[pvId]';
+      params: { pvId: string; adShortLink: string };
+    };
 
 interface AuthState {
   status: AuthStatus;

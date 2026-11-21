@@ -16,6 +16,7 @@ import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import { getAuthErrorMessage, HttpError } from '@/features/auth/api';
 import { OtpInput } from '@/features/auth/components/OtpInput';
+import { getLoginReturnParams, getPostLoginRoute } from '@/features/auth/returnRoute';
 import { useResendTimer } from '@/features/auth/useResendTimer';
 import { useSendOtp } from '@/features/auth/useSendOtp';
 import { useVerifyOtp } from '@/features/auth/useVerifyOtp';
@@ -24,13 +25,23 @@ import { useAuthStore } from '@/store/authStore';
 import { SymbolView } from 'expo-symbols';
 
 export default function VerifyScreen() {
-  const { phone: rawPhone, returnTo: rawReturnTo } = useLocalSearchParams<{
+  const {
+    phone: rawPhone,
+    returnTo: rawReturnTo,
+    adShortLink: rawAdShortLink,
+    pvId: rawPvId,
+  } = useLocalSearchParams<{
     phone?: string;
     returnTo?: string;
+    adShortLink?: string;
+    pvId?: string;
   }>();
   const phone = typeof rawPhone === 'string' ? rawPhone : '';
-  const returnToAds = rawReturnTo === 'ads';
-  const returnToAdStageThree = rawReturnTo === 'ad-stage-three';
+  const returnParams = getLoginReturnParams({
+    returnTo: rawReturnTo,
+    adShortLink: rawAdShortLink,
+    pvId: rawPvId,
+  });
   const [code, setCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const submitLock = useRef(false);
@@ -49,10 +60,7 @@ export default function VerifyScreen() {
       setErrorMessage('');
       try {
         const result = await verifyOtpMutation.mutateAsync({ phone, code: value });
-        await login(
-          result.accessToken,
-          returnToAds ? '/(tabs)/ads' : returnToAdStageThree ? '/ad-stage-three' : undefined,
-        );
+        await login(result.accessToken, getPostLoginRoute(returnParams ?? {}));
       } catch (error) {
         if (error instanceof HttpError && (error.status === 400 || error.status === 401)) {
           setCode('');
@@ -64,7 +72,7 @@ export default function VerifyScreen() {
         submitLock.current = false;
       }
     },
-    [login, phone, returnToAds, returnToAdStageThree, verifyOtpMutation],
+    [login, phone, returnParams, verifyOtpMutation],
   );
 
   const handleResend = async () => {
@@ -163,9 +171,7 @@ export default function VerifyScreen() {
               onPress={() =>
                 router.replace({
                   pathname: '/(auth)/login',
-                  ...((returnToAds || returnToAdStageThree)
-                    ? { params: { returnTo: returnToAds ? 'ads' : 'ad-stage-three' } }
-                    : {}),
+                  ...(returnParams ? { params: returnParams } : {}),
                 })
               }
               style={({ pressed }) => pressed && styles.pressed}>

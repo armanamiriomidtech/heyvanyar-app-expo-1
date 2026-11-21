@@ -21,6 +21,7 @@ import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuthStore } from '@/store/authStore';
 
 type MediaSlide = { type: 'video' | 'image'; key: string; uri: string };
 
@@ -31,6 +32,7 @@ export default function MyAdPreviewScreen({
 }) {
   const { shortLink: rawShortLink } = useLocalSearchParams<{ shortLink: string | string[] }>();
   const shortLink = Array.isArray(rawShortLink) ? rawShortLink[0] : rawShortLink;
+  const authStatus = useAuthStore((state) => state.status);
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const { width, height } = useWindowDimensions();
@@ -43,6 +45,21 @@ export default function MyAdPreviewScreen({
   });
   const [viewTrackingError, setViewTrackingError] = useState('');
   const adId = adQuery.data?.id;
+
+  const openChat = () => {
+    if (!shortLink) return;
+    if (authStatus === 'authenticated') {
+      router.push({
+        pathname: '/chat/new/[shortLink]',
+        params: { shortLink },
+      });
+      return;
+    }
+    router.push({
+      pathname: '/(auth)/login',
+      params: { returnTo: 'chat', adShortLink: shortLink },
+    });
+  };
 
   useEffect(() => {
     if (adId == null) return;
@@ -204,16 +221,20 @@ export default function MyAdPreviewScreen({
       {showDisabledContactActions ? (
         <View style={[styles.contactActions, { backgroundColor: colors.background }]}>
           <Pressable
+            accessibilityLabel={strings.tabs.chatAction}
             accessibilityRole="button"
-            accessibilityState={{ disabled: true }}
-            disabled
-            style={[styles.contactButton, { backgroundColor: colors.backgroundElement }]}>
+            onPress={openChat}
+            style={({ pressed }) => [
+              styles.contactButton,
+              { backgroundColor: colors.primary },
+              pressed ? styles.pressed : null,
+            ]}>
             <SymbolView
               name={{ ios: 'bubble.left.fill', android: 'chat', web: 'chat' }}
               size={20}
-              tintColor={colors.textSecondary}
+              tintColor={colors.onPrimary}
             />
-            <Text style={[styles.contactButtonText, { color: colors.textSecondary }]}>
+            <Text style={[styles.contactButtonText, { color: colors.onPrimary }]}>
               {strings.tabs.chatAction}
             </Text>
           </Pressable>
@@ -398,7 +419,6 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     justifyContent: 'center',
     minHeight: 50,
-    opacity: 0.6,
   },
   contactButtonText: { fontSize: 16, fontWeight: '500' },
   category: { fontSize: 10, textAlign: 'right' },

@@ -117,7 +117,12 @@ function AuthNavigation() {
     if (rootSegment === 'my-ads') {
       return <Redirect href="/(auth)/login" />;
     }
-    if (rootSegment !== '(auth)' && rootSegment !== '(tabs)' && rootSegment !== 'ad') {
+    if (
+      rootSegment !== '(auth)' &&
+      rootSegment !== '(tabs)' &&
+      rootSegment !== 'ad' &&
+      rootSegment !== 'chat'
+    ) {
       return <Redirect href="/(tabs)" />;
     }
   } else if (status === 'authenticated') {
@@ -128,7 +133,8 @@ function AuthNavigation() {
       rootSegment !== 'ad-stage-two' &&
       rootSegment !== 'ad-stage-three' &&
       rootSegment !== 'my-ads' &&
-      rootSegment !== 'ad'
+      rootSegment !== 'ad' &&
+      rootSegment !== 'chat'
     ) {
       return <Redirect href="/(tabs)/profile" />;
     }
@@ -142,6 +148,7 @@ function AuthNavigation() {
       <Stack.Screen name="ad-stage-three" />
       <Stack.Screen name="my-ads" />
       <Stack.Screen name="ad" />
+      <Stack.Screen name="chat" />
     </Stack>
   );
 }
