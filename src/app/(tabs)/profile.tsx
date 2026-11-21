@@ -1,0 +1,313 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useState, type ComponentProps } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { AppText as Text } from '@/components/app-text';
+import { strings } from '@/constants/strings';
+import { Colors, Spacing } from '@/constants/theme';
+import { getAuthErrorMessage, logoutFromServer } from '@/features/auth/api';
+import { getCurrentUser } from '@/features/profile/api';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuthStore } from '@/store/authStore';
+
+export default function ProfileScreen() {
+  const status = useAuthStore((state) => state.status);
+  const logout = useAuthStore((state) => state.logout);
+  const queryClient = useQueryClient();
+  const [logoutError, setLogoutError] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false);
+  const profileQuery = useQuery({
+    queryKey: ['profile', 'me'],
+    queryFn: getCurrentUser,
+    enabled: status === 'authenticated',
+    retry: false,
+  });
+  const scheme = useColorScheme();
+  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      queryClient.removeQueries({ queryKey: ['profile', 'me'] });
+      router.replace('/(auth)/login');
+    }
+  }, [queryClient, status]);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError('');
+    try {
+      await logoutFromServer();
+      await logout();
+      queryClient.clear();
+    } catch (error) {
+      setLogoutError(getAuthErrorMessage(error));
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  if (status !== 'authenticated') return null;
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.profileSummary}>
+          <View style={[styles.avatar, { backgroundColor: colors.backgroundElement }]}>
+            <SymbolView
+              name={{ ios: 'person.crop.circle.fill', android: 'account_circle', web: 'account_circle' }}
+              size={76}
+              tintColor={colors.iconMuted}
+            />
+          </View>
+          {profileQuery.isPending ? (
+            <ActivityIndicator color={colors.textSecondary} />
+          ) : profileQuery.isError ? (
+            <View style={styles.profileMessage}>
+              <Text style={[styles.description, { color: colors.textSecondary }]}>
+                {strings.tabs.profileLoadingError}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void profileQuery.refetch()}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <Text style={[styles.retryText, { color: colors.text }]}>
+                  {strings.common.retry}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={[styles.mobile, { color: colors.text }]}>
+              {profileQuery.data.mobile}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.menu}>
+          <ProfileMenuItem
+            colors={colors}
+            icon={{ ios: 'list.bullet.rectangle', android: 'list_alt', web: 'list_alt' }}
+            label={strings.tabs.myAdsMenu}
+            onPress={() => router.push('/my-ads')}
+          />
+          <ProfileMenuItem
+            colors={colors}
+            icon={{ ios: 'plus.app.fill', android: 'add_box', web: 'add_box' }}
+            label={strings.tabs.createAdMenu}
+            onPress={() => router.push('/(tabs)/ads')}
+          />
+          <ProfileMenuItem
+            colors={colors}
+            icon={{
+              ios: 'bubble.left.and.bubble.right.fill',
+              android: 'chat',
+              web: 'chat',
+            }}
+            label={strings.tabs.chatMenu}
+            onPress={() => router.push('/(tabs)/chat')}
+          />
+        </View>
+
+        {logoutError ? (
+          <Text accessibilityRole="alert" style={[styles.error, { color: colors.error }]}>
+            {logoutError}
+          </Text>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={strings.tabs.logout}
+          accessibilityState={{ disabled: isLoggingOut }}
+          disabled={isLoggingOut}
+          onPress={() => setShowLogoutConfirmation(true)}
+          style={({ pressed }) => [
+            styles.logoutButton,
+            { backgroundColor: colors.backgroundElement },
+            pressed && !isLoggingOut ? styles.pressed : null,
+            isLoggingOut ? styles.disabled : null,
+          ]}>
+          <View style={styles.menuLabel}>
+            <SymbolView
+              name={{ ios: 'rectangle.portrait.and.arrow.right', android: 'logout', web: 'logout' }}
+              size={22}
+              tintColor={colors.error}
+            />
+            <Text style={[styles.menuText, { color: colors.error }]}>
+              {strings.tabs.logout}
+            </Text>
+          </View>
+          {isLoggingOut ? (
+            <ActivityIndicator color={colors.error} />
+          ) : (
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
+              size={18}
+              tintColor={colors.textSecondary}
+            />
+          )}
+        </Pressable>
+      </ScrollView>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowLogoutConfirmation(false)}
+        transparent
+        visible={showLogoutConfirmation}>
+        <View style={styles.logoutModalOverlay}>
+          <Pressable
+            accessibilityLabel={strings.tabs.logoutConfirmClose}
+            accessibilityRole="button"
+            onPress={() => setShowLogoutConfirmation(false)}
+            style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: 0.45 }]}
+          />
+          <View style={styles.logoutConfirmSheet}>
+            <Text style={[styles.logoutConfirmMessage, { color: colors.text }]}>
+              {strings.tabs.logoutConfirmMessage}
+            </Text>
+            <View style={styles.logoutConfirmActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowLogoutConfirmation(false)}
+                style={({ pressed }) => [
+                  styles.logoutConfirmButton,
+                  { borderColor: colors.primary },
+                  pressed ? styles.pressed : null,
+                ]}>
+                <Text style={[styles.logoutConfirmButtonText, { color: colors.primary }]}>
+                  {strings.tabs.logoutConfirmNo}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isLoggingOut }}
+                disabled={isLoggingOut}
+                onPress={() => {
+                  setShowLogoutConfirmation(false);
+                  void handleLogout();
+                }}
+                style={({ pressed }) => [
+                  styles.logoutConfirmButton,
+                  { borderColor: colors.primary },
+                  pressed && !isLoggingOut ? styles.pressed : null,
+                  isLoggingOut ? styles.disabled : null,
+                ]}>
+                {isLoggingOut ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text style={[styles.logoutConfirmButtonText, { color: colors.primary }]}>
+                    {strings.tabs.logoutConfirmYes}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+type MenuIcon = ComponentProps<typeof SymbolView>['name'];
+
+function ProfileMenuItem({
+  colors,
+  icon,
+  label,
+  onPress,
+}: {
+  colors: (typeof Colors)[keyof typeof Colors];
+  icon: MenuIcon;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuItem,
+        { backgroundColor: colors.backgroundElement },
+        pressed ? styles.pressed : null,
+      ]}>
+      <View style={styles.menuLabel}>
+        <SymbolView name={icon} size={22} tintColor={colors.secondary} />
+        <Text style={[styles.menuText, { color: colors.text }]}>{label}</Text>
+      </View>
+      <SymbolView
+        name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
+        size={18}
+        tintColor={colors.textSecondary}
+      />
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four },
+  profileSummary: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
+  avatar: {
+    alignItems: 'center',
+    borderRadius: 48,
+    height: 96,
+    justifyContent: 'center',
+    width: 96,
+  },
+  mobile: { fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  menu: { gap: Spacing.two, marginTop: Spacing.three },
+  menuItem: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    minHeight: 58,
+    paddingHorizontal: Spacing.three,
+  },
+  menuLabel: { alignItems: 'center', flexDirection: 'row-reverse', gap: Spacing.two },
+  menuText: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
+  profileMessage: { alignItems: 'center', gap: Spacing.two },
+  description: { fontSize: 16, lineHeight: 26, textAlign: 'right' },
+  retryText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  error: { textAlign: 'right', lineHeight: 22 },
+  logoutButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginTop: 'auto',
+    minHeight: 58,
+    paddingHorizontal: Spacing.three,
+  },
+  logoutModalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  logoutConfirmSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    height: '15%',
+    justifyContent: 'space-between',
+    padding: Spacing.three,
+  },
+  logoutConfirmMessage: { fontSize: 14, textAlign: 'center' },
+  logoutConfirmActions: { flexDirection: 'row-reverse', gap: Spacing.two },
+  logoutConfirmButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  logoutConfirmButtonText: { fontSize: 16, textAlign: 'center' , fontWeight : '500' },
+  pressed: { opacity: 0.75 },
+  disabled: { opacity: 0.6 },
+});
