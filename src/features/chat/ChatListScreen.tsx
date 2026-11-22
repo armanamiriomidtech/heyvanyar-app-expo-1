@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import { Redirect, router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,13 +10,13 @@ import type { Socket } from 'socket.io-client';
 import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
-import { getCurrentUser } from '@/features/profile/api';
 import { getAuthErrorMessage } from '@/features/auth/api';
-import { createChatSocket } from '@/features/chat/socket';
 import { formatChatTime } from '@/features/chat/format';
+import { createChatSocket } from '@/features/chat/socket';
 import { chatPvSchema, type ChatPv } from '@/features/chat/types';
-import { readAuthSession, useAuthStore } from '@/store/authStore';
+import { getCurrentUser } from '@/features/profile/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { readAuthSession, useAuthStore } from '@/store/authStore';
 
 export default function ChatListScreen() {
   const status = useAuthStore((state) => state.status);
@@ -30,6 +32,7 @@ export default function ChatListScreen() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [socketError, setSocketError] = useState('');
+  const [activeTab, setActiveTab] = useState<'mine' | 'others'>('mine');
   const socketRef = useRef<Socket | null>(null);
   const userId = userQuery.data?.id;
 
@@ -61,13 +64,23 @@ export default function ChatListScreen() {
         });
         socket.on('findAllPv', (payload: unknown) => {
           if (responseTimeout) clearTimeout(responseTimeout);
-          if (!Array.isArray(payload)) {
+          let pvList: unknown[] | null = null;
+          if (Array.isArray(payload)) {
+            pvList = payload;
+          } else if (
+            typeof payload === 'object' &&
+            payload !== null &&
+            Array.isArray((payload as { pvs?: unknown[] }).pvs)
+          ) {
+            pvList = (payload as { pvs: unknown[] }).pvs;
+          }
+          if (!pvList) {
             setSocketError(strings.tabs.chatLoadingError);
             setIsRefreshing(false);
             setIsConnecting(false);
             return;
           }
-          const parsed = payload.map((item) => chatPvSchema.safeParse(item));
+          const parsed = pvList.map((item) => chatPvSchema.safeParse(item));
           if (parsed.some((item) => !item.success)) {
             setSocketError(strings.tabs.chatLoadingError);
           } else {
@@ -90,6 +103,29 @@ export default function ChatListScreen() {
             ...current.filter((item) => item._id !== parsed.data._id),
           ]);
         });
+        socket.on(
+          'updatePvLastMessageSeen',
+          (payload: unknown) => {
+            if (typeof payload !== 'object' || payload === null) return;
+            const { pvId, unreadCount, lastMessage } = payload as {
+              pvId?: string;
+              unreadCount?: number;
+              lastMessage?: ChatPv['lastMessage'];
+            };
+            if (!pvId) return;
+            setChats((current) =>
+              current.map((chat) =>
+                chat._id === pvId
+                  ? {
+                      ...chat,
+                      ...(lastMessage ? { lastMessage } : {}),
+                      unreadCount: typeof unreadCount === 'number' ? unreadCount : chat.unreadCount,
+                    }
+                  : chat,
+              ),
+            );
+          },
+        );
         socket.on('connect_error', (error: Error) => {
           if (responseTimeout) clearTimeout(responseTimeout);
           setSocketError(
@@ -138,6 +174,12 @@ export default function ChatListScreen() {
     });
   };
 
+  const filteredChats = chats.filter((chat) =>
+    activeTab === 'mine'
+      ? String(chat.receiver.id) === String(userId)
+      : String(chat.receiver.id) !== String(userId),
+  );
+
   const refresh = () => {
     if (!socketRef.current?.connected) {
       setSocketError(strings.tabs.chatConnectionError);
@@ -165,14 +207,49 @@ export default function ChatListScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.chatTitle}</Text>
         <Pressable
-          accessibilityLabel={strings.common.retry}
+          accessibilityLabel={strings.common.backToHome}
           accessibilityRole="button"
-          onPress={refresh}
-          style={({ pressed }) => [styles.refreshButton, pressed ? styles.pressed : null]}>
-          <Text style={{ color: colors.primary }}>{strings.common.retry}</Text>
+          hitSlop={8}
+          onPress={() => router.replace('/(tabs)')}
+          style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            size={22}
+            tintColor={colors.text}
+          />
         </Pressable>
+        <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.chatTitle}</Text>
+      </View>
+      <View style={styles.tabs}>
+        {([
+          ['mine', strings.tabs.chatMyAds],
+          ['others', strings.tabs.chatOthersAds],
+        ] as const).map(([tab, label]) => {
+          const active = activeTab === tab;
+          return (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.tab,
+                {
+                  borderBottomColor: active ? colors.primary : colors.border,
+                  backgroundColor: active ? colors.backgroundElement : colors.background,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: active ? colors.primary : colors.textSecondary },
+                ]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
       {socketError ? (
         <Text accessibilityRole="alert" style={[styles.error, { color: colors.error }]}>
@@ -184,7 +261,7 @@ export default function ChatListScreen() {
           <ActivityIndicator color={colors.primary} />
           <Text style={{ color: colors.textSecondary }}>{strings.common.loading}</Text>
         </View>
-      ) : chats.length === 0 && !socketError ? (
+      ) : filteredChats.length === 0 && !socketError ? (
         <View style={styles.centered}>
           <Text style={[styles.message, { color: colors.textSecondary }]}>
             {strings.tabs.chatEmpty}
@@ -192,7 +269,7 @@ export default function ChatListScreen() {
         </View>
       ) : (
         <FlatList
-          data={chats}
+          data={filteredChats}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContent}
           refreshing={isRefreshing}
@@ -237,14 +314,30 @@ function ChatRow({
         { borderBottomColor: colors.border },
         pressed ? styles.pressed : null,
       ]}>
+      {chat.ad.image ? (
+        <Image contentFit="cover" source={{ uri: chat.ad.image }} style={styles.adImage} />
+      ) : (
+        <View style={[styles.adImage, styles.imagePlaceholder, { backgroundColor: colors.backgroundElement }]}>
+          <Text style={{ color: colors.textSubtle }}>{strings.tabs.chatAdLabel}</Text>
+        </View>
+      )}
       <View style={styles.chatDetails}>
         <View style={styles.chatTitleLine}>
           <Text numberOfLines={1} style={[styles.adTitle, { color: colors.text }]}>
             {chat.ad.title}
           </Text>
-          <Text style={[styles.time, { color: colors.textSubtle }]}>
-            {formatChatTime(chat.lastMessage?.createdAt ?? chat.updatedAt)}
-          </Text>
+          <View style={styles.titleMeta}>
+            <Text style={[styles.time, { color: colors.textSubtle }]}>
+              {formatChatTime(chat.lastMessage?.createdAt ?? chat.updatedAt)}
+            </Text>
+            {(chat.unreadCount ?? 0) > 0 ? (
+              <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.unreadText, { color: colors.onPrimary }]}>
+                  {chat.unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
         <Text numberOfLines={1} style={[styles.participant, { color: colors.textSecondary }]}>
           {participantName}
@@ -269,23 +362,48 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
   },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
-  refreshButton: { padding: Spacing.two },
+  backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 40 },
+  tabs: {
+    flexDirection: 'row-reverse',
+    paddingHorizontal: Spacing.three,
+  },
+  tab: {
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    flex: 1,
+    paddingVertical: Spacing.two,
+  },
+  tabText: { fontSize: 14, fontWeight: '600' },
   listContent: { flexGrow: 1, paddingHorizontal: Spacing.three },
   chatRow: {
+    alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
     minHeight: 90,
     justifyContent: 'center',
     paddingVertical: Spacing.two,
   },
-  chatDetails: { gap: Spacing.one },
+  adImage: { borderRadius: 8, height: 40, width: 40 },
+  imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  chatDetails: { flex: 1, gap: Spacing.one },
   chatTitleLine: { alignItems: 'center', flexDirection: 'row-reverse', gap: Spacing.two },
   adTitle: { flex: 1, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  titleMeta: { alignItems: 'center', flexDirection: 'row', gap: Spacing.one },
   time: { fontSize: 11 },
+  unreadBadge: {
+    alignItems: 'center',
+    borderRadius: 10,
+    height: 20,
+    justifyContent: 'center',
+    minWidth: 20,
+    paddingHorizontal: 4,
+  },
+  unreadText: { fontSize: 10, fontWeight: '700' },
   participant: { fontSize: 12, textAlign: 'right' },
   lastMessage: { fontSize: 13, textAlign: 'right' },
   message: { fontSize: 15, lineHeight: 24, textAlign: 'center' },

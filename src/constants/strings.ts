@@ -63,6 +63,8 @@ export const strings = {
     chatNoMessages: 'هنوز پیامی در این گفتگو نیست.',
     chatAdLabel: 'آگهی',
     chatUnknownUser: 'کاربر',
+    chatMyAds: 'آگهی‌های من',
+    chatOthersAds: 'آگهی‌های دیگران',
     adsTitle: 'ثبت آگهی',
     adsDescription: 'برای ثبت آگهی جدید، این بخش به‌زودی فعال می‌شود.',
     profileName: 'نام',

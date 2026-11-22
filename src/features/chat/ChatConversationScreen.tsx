@@ -100,6 +100,16 @@ export default function ChatConversationScreen({
               setHistoryLoaded(true);
             },
           );
+          if (pvId) {
+            socket.emit('openPv', { pvId }, (response: unknown) => {
+              if (historyTimeout) clearTimeout(historyTimeout);
+              const parsed = chatMessagesResponseSchema.safeParse(response);
+              if (parsed.success) {
+                setMessages(parsed.data.messages);
+                setHistoryLoaded(true);
+              }
+            });
+          }
         });
         socket.on('disconnect', (reason: string) => {
           if (historyTimeout) clearTimeout(historyTimeout);
@@ -132,8 +142,42 @@ export default function ChatConversationScreen({
             parsed.data,
             ...current.filter((message) => message._id !== parsed.data._id),
           ]);
+          if (pvId && String(parsed.data.senderId) !== String(userId)) {
+            socket.emit('markMessagesAsSeen', {
+              pvId,
+              messageIds: [parsed.data._id],
+            });
+          }
           setSendError('');
         });
+        socket.on(
+          'messagesSeen',
+          (payload: unknown) => {
+            if (typeof payload !== 'object' || payload === null) return;
+            const { pvId: seenPvId, messageIds, seenBy } = payload as {
+              pvId?: string;
+              messageIds?: string[];
+              seenBy?: { userId: string | number; seenAt?: string };
+            };
+            if (seenPvId && seenPvId !== pvId) return;
+            if (!Array.isArray(messageIds)) return;
+            const idSet = new Set(messageIds.map(String));
+            setMessages((current) =>
+              current.map((message) =>
+                idSet.has(String(message._id))
+                  ? {
+                      ...message,
+                      isRead: true,
+                      seenBy: [
+                        ...(message.seenBy ?? []),
+                        ...(seenBy ? [seenBy] : []),
+                      ],
+                    }
+                  : message,
+              ),
+            );
+          },
+        );
         socket.on('exception', () => setSendError(strings.tabs.chatSendError));
         socket.on('connect_error', (error: Error) => {
           if (historyTimeout) clearTimeout(historyTimeout);
@@ -205,7 +249,7 @@ export default function ChatConversationScreen({
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
           <SymbolView
-            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
             size={22}
             tintColor={colors.text}
           />
@@ -353,6 +397,16 @@ function MessageBubble({
       <Text style={[styles.messageTime, { color: isMine ? colors.onPrimary : colors.textSubtle }]}>
         {formatChatTime(message.createdAt)}
       </Text>
+      {isMine ? (
+        <Text
+          accessibilityLabel={message.isRead ? 'پیام خوانده شد' : 'پیام خوانده نشد'}
+          style={[
+            styles.readStatus,
+            { color: message.isRead ? '#2F80ED' : colors.onPrimary },
+          ]}>
+          {message.isRead ? '✓✓' : '✓'}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -397,6 +451,7 @@ const styles = StyleSheet.create({
   ownMessage: { alignSelf: 'flex-end' },
   otherMessage: { alignSelf: 'flex-start' },
   messageTime: { fontSize: 10, textAlign: 'left' },
+  readStatus: { fontSize: 11, letterSpacing: -2, textAlign: 'left' },
   sendError: { paddingHorizontal: Spacing.three, textAlign: 'right' },
   composer: {
     alignItems: 'flex-end',

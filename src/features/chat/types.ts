@@ -8,6 +8,10 @@ export const chatMessageSchema = z
     senderId: userIdSchema,
     content: z.object({ text: z.string().optional() }).passthrough(),
     createdAt: z.string(),
+    isRead: z.boolean().optional(),
+    seenBy: z
+      .array(z.object({ userId: userIdSchema, seenAt: z.string().optional() }).passthrough())
+      .optional(),
   })
   .passthrough();
 
@@ -40,10 +44,15 @@ export const chatPvSchema = z
         text: z.string().optional(),
         senderId: userIdSchema.optional(),
         createdAt: z.string().optional(),
+        isRead: z.boolean().optional(),
+        seenBy: z
+          .array(z.object({ userId: userIdSchema, seenAt: z.string().optional() }).passthrough())
+          .optional(),
       })
       .passthrough()
       .optional(),
     updatedAt: z.string().optional(),
+    unreadCount: z.number().int().nonnegative().optional(),
   })
   .passthrough();
 
