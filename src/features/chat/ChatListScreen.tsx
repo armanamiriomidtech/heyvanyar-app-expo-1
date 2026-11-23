@@ -117,10 +117,10 @@ export default function ChatListScreen() {
               current.map((chat) =>
                 chat._id === pvId
                   ? {
-                      ...chat,
-                      ...(lastMessage ? { lastMessage } : {}),
-                      unreadCount: typeof unreadCount === 'number' ? unreadCount : chat.unreadCount,
-                    }
+                    ...chat,
+                    ...(lastMessage ? { lastMessage } : {}),
+                    unreadCount: typeof unreadCount === 'number' ? unreadCount : chat.unreadCount,
+                  }
                   : chat,
               ),
             );
