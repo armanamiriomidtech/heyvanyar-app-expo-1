@@ -139,6 +139,8 @@ const adDetailsSchema = z
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
     description: z.string(),
     publishAt: z.string().min(1),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
     locationId: z.number().int().positive().nullable().optional(),
     location: z
       .object({

@@ -20,6 +20,8 @@ import {
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
+import { NeshanMap } from '@/features/location/NeshanMap';
+import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/store/authStore';
 
@@ -44,6 +46,7 @@ export default function MyAdPreviewScreen({
     retry: false,
   });
   const [viewTrackingError, setViewTrackingError] = useState('');
+  const [mapError, setMapError] = useState('');
   const adId = adQuery.data?.id;
 
   const openChat = () => {
@@ -125,6 +128,10 @@ export default function MyAdPreviewScreen({
     Number(ad.price),
   );
   const relativeTime = formatPersianRelativeTime(ad.publishAt);
+  const coordinate: MapCoordinates | null =
+    typeof ad.latitude === 'number' && typeof ad.longitude === 'number'
+      ? { latitude: ad.latitude, longitude: ad.longitude }
+      : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -211,6 +218,37 @@ export default function MyAdPreviewScreen({
             {price} {strings.tabs.priceUnit}
           </Text>
           <Text style={[styles.description, { color: colors.text }]}>{ad.description}</Text>
+          <View style={styles.mapSection}>
+            <Text style={[styles.mapTitle, { color: colors.text }]}>
+              {strings.tabs.adLocationMapLabel}
+            </Text>
+            {coordinate ? (
+              <>
+                <NeshanMap
+                  backgroundColor={colors.backgroundElement}
+                  coordinate={coordinate}
+                  editable={false}
+                  errorColor={colors.error}
+                  height={220}
+                  onError={() => setMapError(strings.tabs.neshanMapLoadError)}
+                  textColor={colors.text}
+                />
+                <Text style={[styles.mapCoordinates, { color: colors.textSecondary }]}>
+                  {strings.tabs.adCoordinateSelected}: {coordinate.latitude.toFixed(6)},{' '}
+                  {coordinate.longitude.toFixed(6)}
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.mapCoordinates, { color: colors.textSecondary }]}>
+                {strings.tabs.adCoordinatesUnavailable}
+              </Text>
+            )}
+            {mapError ? (
+              <Text accessibilityRole="alert" style={[styles.mapCoordinates, { color: colors.error }]}>
+                {mapError}
+              </Text>
+            ) : null}
+          </View>
           {viewTrackingError ? (
             <Text accessibilityRole="alert" style={[styles.viewTrackingError, { color: colors.error }]}>
               {viewTrackingError}
@@ -404,6 +442,9 @@ const styles = StyleSheet.create({
   mediaPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   placeholderText: { fontSize: 14, textAlign: 'center' },
   details: { gap: Spacing.two, padding: Spacing.four },
+  mapSection: { gap: Spacing.two, marginTop: Spacing.two },
+  mapTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  mapCoordinates: { fontSize: 12, textAlign: 'right' },
   contactActions: {
     borderTopColor: Colors.light.border,
     borderTopWidth: StyleSheet.hairlineWidth,

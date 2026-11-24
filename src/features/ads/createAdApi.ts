@@ -5,6 +5,8 @@ export interface CreateAdRequest {
   price: string;
   description: string;
   locationId: number;
+  latitude: number;
+  longitude: number;
   categoryId: number;
   images: number[];
   mainImageId?: number;

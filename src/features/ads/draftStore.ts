@@ -58,6 +58,8 @@ const storedDetailsSchema = z
     locationTitle: z.string().nullable().optional(),
     locationSelection: storedLocationSelectionSchema.nullable().optional(),
     locationResolved: z.boolean().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
   })
   .strict();
 const storedDraftSchema = z
@@ -168,6 +170,8 @@ function mapAdLocation(ad: AdDetails) {
   return {
     locationId: location?.id ?? ad.locationId ?? null,
     locationTitle: location?.title ?? null,
+    latitude: ad.latitude ?? null,
+    longitude: ad.longitude ?? null,
     locationSelection: location
       ? {
           key: `location:${location.id}`,
@@ -255,6 +259,8 @@ export const useAdDraftStore = create<AdDraftState>((set, get) => ({
     locationId: null,
     locationTitle: null,
     locationSelection: null,
+    latitude: null,
+    longitude: null,
   },
   activeChat: true,
   showMobile: true,
@@ -290,6 +296,8 @@ export const useAdDraftStore = create<AdDraftState>((set, get) => ({
             locationId: null,
             locationTitle: null,
             locationSelection: null,
+            latitude: null,
+            longitude: null,
           },
           activeChat: true,
           showMobile: true,
@@ -332,6 +340,8 @@ export const useAdDraftStore = create<AdDraftState>((set, get) => ({
         locationTitle: parsed.data.details?.locationTitle ?? null,
         locationSelection: parsed.data.details?.locationSelection ?? null,
         locationResolved: parsed.data.details?.locationResolved ?? false,
+        latitude: parsed.data.details?.latitude ?? null,
+        longitude: parsed.data.details?.longitude ?? null,
       };
       if (shortLink && !details.locationResolved) {
         if (details.locationSelection == null) {
@@ -367,7 +377,9 @@ export const useAdDraftStore = create<AdDraftState>((set, get) => ({
         parsed.data.details?.locationId === undefined ||
         parsed.data.details?.locationTitle === undefined ||
         parsed.data.details?.locationSelection === undefined ||
-        parsed.data.details?.locationResolved === undefined
+        parsed.data.details?.locationResolved === undefined ||
+        parsed.data.details?.latitude === undefined ||
+        parsed.data.details?.longitude === undefined
       ) {
         await persistDraft(key, photos, video, category, details, activeChat, showMobile);
       }
@@ -455,6 +467,8 @@ export const useAdDraftStore = create<AdDraftState>((set, get) => ({
         locationId: null,
         locationTitle: null,
         locationSelection: null,
+        latitude: null,
+        longitude: null,
       },
       activeChat: true,
       showMobile: true,

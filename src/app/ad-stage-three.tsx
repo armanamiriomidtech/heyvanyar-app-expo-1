@@ -19,6 +19,8 @@ import { createAd, updateAd } from '@/features/ads/createAdApi';
 import { useAdDraftStore } from '@/features/ads/draftStore';
 import { deleteStoredMedia } from '@/features/ads/mediaStorage';
 import { MAX_AD_PRICE } from '@/features/ads/priceUtils';
+import { NeshanMap } from '../features/location/NeshanMap';
+import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { getAuthErrorMessage } from '@/features/auth/api';
 import { HttpError } from '@/services/http';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -37,6 +39,7 @@ export default function AdStageThreeScreen() {
   const showMobile = useAdDraftStore((state) => state.showMobile);
   const hydrate = useAdDraftStore((state) => state.hydrate);
   const setAdOptions = useAdDraftStore((state) => state.setAdOptions);
+  const setDetails = useAdDraftStore((state) => state.setDetails);
   const clearDraft = useAdDraftStore((state) => state.clearDraft);
   const [errorMessage, setErrorMessage] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -63,6 +66,18 @@ export default function AdStageThreeScreen() {
     !video || (video.status === 'uploaded' && Boolean(video.storedName));
   const isMediaReady = photosAreReady && videoIsReady;
   const hasContactOption = activeChat || showMobile;
+  const hasCoordinates = (value: {
+    latitude?: number | null;
+    longitude?: number | null;
+  }): value is { latitude: number; longitude: number } =>
+    typeof value.latitude === 'number' &&
+    Number.isFinite(value.latitude) &&
+    value.latitude >= -90 &&
+    value.latitude <= 90 &&
+    typeof value.longitude === 'number' &&
+    Number.isFinite(value.longitude) &&
+    value.longitude >= -180 &&
+    value.longitude <= 180;
   const titleLength = details.title.trim().length;
   const descriptionLength = details.description.trim().length;
   const price = Number(details.price);
@@ -76,7 +91,11 @@ export default function AdStageThreeScreen() {
     descriptionLength >= 10 &&
     descriptionLength <= 1000;
   const isPublishReady =
-    Boolean(category) && isDetailsValid && isMediaReady && hasContactOption;
+    Boolean(category) &&
+    isDetailsValid &&
+    hasCoordinates(details) &&
+    isMediaReady &&
+    hasContactOption;
 
   const updateContactOptions = (changes: { activeChat?: boolean; showMobile?: boolean }) => {
     const current = useAdDraftStore.getState();
@@ -99,6 +118,10 @@ export default function AdStageThreeScreen() {
     const validVideo =
       !draft.video ||
       (draft.video.status === 'uploaded' && Boolean(draft.video.storedName));
+    if (!hasCoordinates(draft.details)) {
+      setErrorMessage(strings.tabs.adCoordinatesRequired);
+      return;
+    }
     if (
       !draft.category ||
       (shortLink && draft.editShortLink !== shortLink) ||
@@ -132,6 +155,8 @@ export default function AdStageThreeScreen() {
         price: draft.details.price,
         description: draft.details.description,
         locationId: draft.details.locationId,
+        latitude: draft.details.latitude,
+        longitude: draft.details.longitude,
         categoryId: draft.category.categoryId,
         images,
         ...(images.length > 0 ? { mainImageId: images[0] } : {}),
@@ -237,6 +262,33 @@ export default function AdStageThreeScreen() {
           </Text>
         ) : null}
 
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>
+          {strings.tabs.adCoordinateLabel}
+        </Text>
+        <NeshanMap
+          backgroundColor={colors.backgroundElement}
+          coordinate={hasCoordinates(details) ? details : null}
+          editable
+          errorColor={colors.error}
+          onError={() => setErrorMessage(strings.tabs.neshanMapLoadError)}
+          onCoordinateSelect={(coordinate: MapCoordinates) => {
+            setErrorMessage('');
+            void setDetails(coordinate).catch(() =>
+              setErrorMessage(strings.tabs.adCoordinatesSaveError),
+            );
+          }}
+          textColor={colors.text}
+        />
+        {hasCoordinates(details) ? (
+          <Text style={[styles.coordinateValue, { color: colors.textSecondary }]}>
+            {strings.tabs.adCoordinateSelected}: {details.latitude.toFixed(6)}, {details.longitude.toFixed(6)}
+          </Text>
+        ) : (
+          <Text style={[styles.error, { color: colors.error }]}>
+            {strings.tabs.adCoordinatesRequired}
+          </Text>
+        )}
+
         <View style={[styles.optionRow, { backgroundColor: colors.backgroundElement }]}>
           <Text style={[styles.optionLabel, { color: colors.text }]}>
             {strings.tabs.activeChatLabel}
@@ -336,6 +388,8 @@ const styles = StyleSheet.create({
   },
   content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  sectionLabel: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  coordinateValue: { fontSize: 13, textAlign: 'right' },
   optionRow: {
     alignItems: 'center',
     borderRadius: 10,
