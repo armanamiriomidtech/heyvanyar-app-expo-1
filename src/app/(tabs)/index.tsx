@@ -1,5 +1,4 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
+import { AdCard } from '@/features/ads/AdCard';
 import {
   searchAdCategories,
   searchAds,
@@ -522,63 +522,6 @@ function CategoryChip({
   );
 }
 
-function AdCard({
-  ad,
-  colors,
-  onPress,
-}: {
-  ad: Ad;
-  colors: (typeof Colors)[keyof typeof Colors];
-  onPress: () => void;
-}) {
-  const price = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 2 }).format(
-    Number(ad.price),
-  );
-
-  return (
-    <Pressable
-      accessibilityLabel={`${ad.title}, ${price} ${strings.tabs.priceUnit}`}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.adCard,
-        { backgroundColor: colors.background, borderBottomColor: colors.backgroundElement },
-        pressed ? styles.pressed : null,
-      ]}>
-      {ad.mainImage?.url ? (
-        <Image
-          accessibilityLabel={ad.title}
-          contentFit="cover"
-          source={{ uri: ad.mainImage.url }}
-          style={styles.image}
-        />
-      ) : (
-        <View style={[styles.image, styles.imagePlaceholder, { backgroundColor: colors.backgroundElement }]}>
-          <Text style={[styles.imagePlaceholderText, { color: colors.textSecondary }]}>
-            {strings.tabs.adImageUnavailable}
-          </Text>
-        </View>
-      )}
-      <View style={styles.adDetails}>
-        <Text numberOfLines={2} style={[styles.adTitle, { color: colors.text }]}>
-          {ad.title}
-        </Text>
-        {ad.category ? (
-          <Text numberOfLines={1} style={[styles.category, { color: colors.textSecondary }]}>
-            {ad.category.parent?.title
-              ? `${ad.category.parent.title}/${ad.category.title}`
-              : ad.category.title}
-          </Text>
-        ) : null}
-
-        <Text style={[styles.price, { color: colors.textSecondary }]}>
-          {price} {strings.tabs.priceUnit}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   screen: { flex: 1, position: 'relative' },
@@ -699,21 +642,6 @@ const styles = StyleSheet.create({
   description: { fontSize: 14, lineHeight: 26, textAlign: 'right' },
   message: { alignItems: 'center', flex: 1, gap: Spacing.three, justifyContent: 'center', padding: Spacing.four },
   retryText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
-  adCard: {
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: Spacing.three,
-    minHeight: 124,
-    paddingVertical: Spacing.three,
-  },
-  image: { borderRadius: 10, height: 100, width: 112 },
-  imagePlaceholder: { alignItems: 'center', justifyContent: 'center', padding: Spacing.two },
-  imagePlaceholderText: { fontSize: 12, textAlign: 'center' },
-  adDetails: { flex: 1, gap: Spacing.two, alignItems: 'flex-end' },
-  category: { fontSize: 10, textAlign: 'right' },
-  adTitle: { fontSize: 14, fontWeight: '500', textAlign: 'right' },
-  price: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
   footer: { alignItems: 'center', justifyContent: 'center', minHeight: 56 },
   pressed: { opacity: 0.7 },
 });

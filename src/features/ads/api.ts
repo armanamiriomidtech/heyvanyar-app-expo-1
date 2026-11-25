@@ -66,6 +66,22 @@ const adsResponseSchema = z
   })
   .passthrough();
 
+const bookmarkedAdsResponseSchema = z
+  .object({
+    statusCode: z.number(),
+    message: z.string(),
+    data: z.array(adSchema),
+  })
+  .passthrough();
+
+const adBookmarkStatusResponseSchema = z
+  .object({
+    statusCode: z.number(),
+    message: z.string(),
+    data: z.object({ isBookmarked: z.boolean() }),
+  })
+  .passthrough();
+
 const adCategorySuggestionSchema = z
   .object({
     categoryId: z.number().int(),
@@ -179,6 +195,7 @@ const myAdsResponseSchema = z
 const adDetailsSchema = z
   .object({
     id: z.number().int(),
+    creatorId: z.union([z.number().int(), z.string()]).nullable().optional(),
     shortLink: z.string().min(1),
     title: z.string().min(1),
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
@@ -303,6 +320,30 @@ export async function searchAds({
   const parsed = adsResponseSchema.safeParse(response);
   if (!parsed.success) throw new Error(strings.auth.invalidResponse);
   return parsed.data.data;
+}
+
+export async function getBookmarkedAds(page = 1, limit = 10): Promise<Ad[]> {
+  const response = await http.request(
+    `/ads/bookmarks?page=${page}&limit=${limit}`,
+    { method: 'GET' },
+  );
+  const parsed = bookmarkedAdsResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data;
+}
+
+export async function getAdBookmarkStatus(adId: number): Promise<boolean> {
+  const response = await http.request(`/ads/bookmarks/status/${adId}`, { method: 'GET' });
+  const parsed = adBookmarkStatusResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data.isBookmarked;
+}
+
+export async function toggleAdBookmark(adId: number): Promise<boolean> {
+  const response = await http.request(`/ads/bookmarks/toggle/${adId}`, { method: 'POST' });
+  const parsed = adBookmarkStatusResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data.isBookmarked;
 }
 
 export async function searchAdCategories(query: string): Promise<AdCategorySuggestion[]> {

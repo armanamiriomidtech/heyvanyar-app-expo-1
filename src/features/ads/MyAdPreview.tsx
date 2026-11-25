@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -21,15 +21,18 @@ import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getAdDetails,
+  getAdBookmarkStatus,
   getMyAds,
+  toggleAdBookmark,
   type AdDetails,
   type AdMedia,
   type MyAd,
 } from '@/features/ads/api';
-import { AdReportLoginModal } from '@/features/ads/AdReportLoginModal';
+import { LoginRequiredModal } from '@/features/auth/LoginRequiredModal';
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
+import { getCurrentUser } from '@/features/profile/api';
 import { NeshanMap } from '@/features/location/NeshanMap';
 import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -45,6 +48,7 @@ export default function MyAdPreviewScreen({
   const { shortLink: rawShortLink } = useLocalSearchParams<{ shortLink: string | string[] }>();
   const shortLink = Array.isArray(rawShortLink) ? rawShortLink[0] : rawShortLink;
   const authStatus = useAuthStore((state) => state.status);
+  const queryClient = useQueryClient();
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const { width, height } = useWindowDimensions();
@@ -55,11 +59,38 @@ export default function MyAdPreviewScreen({
     enabled: Boolean(shortLink),
     retry: false,
   });
+  const currentUserQuery = useQuery({
+    queryKey: ['profile', 'me'],
+    queryFn: getCurrentUser,
+    enabled: showDisabledContactActions && authStatus === 'authenticated',
+    retry: false,
+  });
   const [viewTrackingError, setViewTrackingError] = useState('');
   const [mapError, setMapError] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<MediaSlide | null>(null);
-  const [showReportLoginPrompt, setShowReportLoginPrompt] = useState(false);
+  const [loginPrompt, setLoginPrompt] = useState<'bookmark' | 'report' | null>(null);
+  const [bookmarkError, setBookmarkError] = useState('');
   const adId = adQuery.data?.id;
+  const bookmarkStatusQuery = useQuery({
+    queryKey: ['ad-bookmark-status', adId],
+    queryFn: () => {
+      if (adId == null) throw new Error(strings.auth.invalidResponse);
+      return getAdBookmarkStatus(adId);
+    },
+    enabled: showDisabledContactActions && authStatus === 'authenticated' && adId != null,
+    retry: false,
+  });
+  const toggleBookmarkMutation = useMutation({
+    mutationFn: toggleAdBookmark,
+    onError: (error) => {
+      setBookmarkError(getAuthErrorMessage(error, strings.tabs.adBookmarkToggleError));
+    },
+    onSuccess: (isBookmarked, id) => {
+      setBookmarkError('');
+      queryClient.setQueryData(['ad-bookmark-status', id], isBookmarked);
+      void queryClient.invalidateQueries({ queryKey: ['ad-bookmarks'] });
+    },
+  });
 
   const openChat = () => {
     if (!shortLink) return;
@@ -85,16 +116,31 @@ export default function MyAdPreviewScreen({
       });
       return;
     }
-    setShowReportLoginPrompt(true);
+    setLoginPrompt('report');
   };
 
-  const openLoginForReport = () => {
+  const openLoginForPrompt = () => {
     if (!shortLink) return;
-    setShowReportLoginPrompt(false);
+    const prompt = loginPrompt;
+    setLoginPrompt(null);
     router.push({
       pathname: '/(auth)/login',
-      params: { returnTo: 'ad-report', adShortLink: shortLink },
+      params: {
+        returnTo: prompt === 'bookmark' ? 'ad-bookmark' : 'ad-report',
+        adShortLink: shortLink,
+      },
     });
+  };
+
+  const handleBookmarkPress = () => {
+    if (authStatus === 'loading') return;
+    if (authStatus !== 'authenticated') {
+      setLoginPrompt('bookmark');
+      return;
+    }
+    if (adId == null || toggleBookmarkMutation.isPending) return;
+    setBookmarkError('');
+    toggleBookmarkMutation.mutate(adId);
   };
 
   useEffect(() => {
@@ -155,6 +201,14 @@ export default function MyAdPreviewScreen({
   }
 
   const ad = adQuery.data;
+  const isAdOwner =
+    ad.creatorId != null &&
+    currentUserQuery.data != null &&
+    String(ad.creatorId) === String(currentUserQuery.data.id);
+  const isContactActionsDisabled =
+    isAdOwner ||
+    (authStatus === 'authenticated' &&
+      (currentUserQuery.isPending || currentUserQuery.isError));
   const listAd = mediaQuery.data?.find((item) => item.shortLink === shortLink);
   const slides = getMediaSlides(ad, listAd);
   const price = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 2 }).format(
@@ -183,7 +237,44 @@ export default function MyAdPreviewScreen({
             tintColor={colors.text}
           />
         </Pressable>
+        {showDisabledContactActions ? (
+          <Pressable
+            accessibilityLabel={strings.tabs.adBookmarkAction}
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled: toggleBookmarkMutation.isPending,
+              selected: bookmarkStatusQuery.data === true,
+            }}
+            disabled={toggleBookmarkMutation.isPending}
+            onPress={handleBookmarkPress}
+            style={({ pressed }) => [styles.bookmarkButton, pressed ? styles.pressed : null]}>
+            {bookmarkStatusQuery.data ? (
+              <View style={styles.bookmarkFill}>
+                <View style={[styles.bookmarkFillBody, { backgroundColor: colors.primary }]}>
+                  <View
+                    style={[
+                      styles.bookmarkCutout,
+                      { borderBottomColor: colors.background },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : (
+              <SymbolView
+                name={{ ios: 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
+                size={22}
+                tintColor={colors.text}
+              />
+            )}
+          </Pressable>
+        ) : null}
       </View>
+      {showDisabledContactActions && (bookmarkError || bookmarkStatusQuery.isError) ? (
+        <Text style={[styles.bookmarkError, { color: colors.error }]}>
+          {bookmarkError ||
+            getAuthErrorMessage(bookmarkStatusQuery.error, strings.tabs.adBookmarkToggleError)}
+        </Text>
+      ) : null}
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
         <View style={[styles.gallery, { height: mediaHeight }]}>
           {slides.length > 0 ? (
@@ -350,27 +441,49 @@ export default function MyAdPreviewScreen({
           ) : null}
         </View>
       </ScrollView>
+      {showDisabledContactActions &&
+      authStatus === 'authenticated' &&
+      currentUserQuery.isError ? (
+        <Text style={[styles.contactIdentityError, { color: colors.error }]}>
+          {getAuthErrorMessage(currentUserQuery.error, strings.tabs.profileLoadingError)}
+        </Text>
+      ) : null}
       {showDisabledContactActions ? (
         <View style={[styles.contactActions, { backgroundColor: colors.background }]}>
           <Pressable
             accessibilityLabel={strings.tabs.chatAction}
             accessibilityRole="button"
+            accessibilityState={{ disabled: isContactActionsDisabled }}
+            disabled={isContactActionsDisabled}
             onPress={openChat}
             style={({ pressed }) => [
               styles.contactButton,
-              { backgroundColor: colors.primary },
-              pressed ? styles.pressed : null,
+              {
+                backgroundColor: isContactActionsDisabled
+                  ? colors.backgroundElement
+                  : colors.primary,
+              },
+              pressed && !isContactActionsDisabled ? styles.pressed : null,
             ]}>
             <SymbolView
               name={{ ios: 'bubble.left.fill', android: 'chat', web: 'chat' }}
               size={20}
-              tintColor={colors.onPrimary}
+              tintColor={isContactActionsDisabled ? colors.textSecondary : colors.onPrimary}
             />
-            <Text style={[styles.contactButtonText, { color: colors.onPrimary }]}>
+            <Text
+              style={[
+                styles.contactButtonText,
+                {
+                  color: isContactActionsDisabled
+                    ? colors.textSecondary
+                    : colors.onPrimary,
+                },
+              ]}>
               {strings.tabs.chatAction}
             </Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={strings.tabs.callAction}
             accessibilityRole="button"
             accessibilityState={{ disabled: true }}
             disabled
@@ -392,12 +505,32 @@ export default function MyAdPreviewScreen({
         onClose={() => setSelectedMedia(null)}
         width={width}
       />
-      {showDisabledContactActions ? (
-        <AdReportLoginModal
+      {showDisabledContactActions && loginPrompt ? (
+        <LoginRequiredModal
+          actionLabel={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginAction
+              : strings.tabs.adReportLoginAction
+          }
           colors={colors}
-          onClose={() => setShowReportLoginPrompt(false)}
-          onLogin={openLoginForReport}
-          visible={showReportLoginPrompt}
+          cancelLabel={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginCancel
+              : strings.tabs.adReportLoginCancel
+          }
+          message={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginRequired
+              : strings.tabs.adReportLoginRequired
+          }
+          onClose={() => setLoginPrompt(null)}
+          onLogin={openLoginForPrompt}
+          title={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginTitle
+              : strings.tabs.adReportLoginTitle
+          }
+          visible
         />
       ) : null}
     </SafeAreaView>
@@ -623,12 +756,40 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.three,
     minHeight: 52,
   },
   headerTitle: { fontSize: 16, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center' },
+  bookmarkButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  bookmarkFill: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    width: 24,
+  },
+  bookmarkFillBody: {
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    height: 22,
+    position: 'relative',
+    width: 18,
+  },
+  bookmarkCutout: {
+    alignSelf: 'center',
+    borderBottomWidth: 7,
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 9,
+    borderRightColor: 'transparent',
+    borderRightWidth: 9,
+    bottom: 0,
+    height: 0,
+    position: 'absolute',
+    width: 0,
+  },
+  bookmarkError: { fontSize: 12, paddingHorizontal: Spacing.three, textAlign: 'right' },
   gallery: { backgroundColor: Colors.light.surfaceMuted, width: '100%' },
   slide: {
     alignItems: 'center',
@@ -685,6 +846,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three,
   },
+  contactIdentityError: { fontSize: 12, textAlign: 'right', width: '100%' },
   contactButton: {
     alignItems: 'center',
     borderRadius: 10,

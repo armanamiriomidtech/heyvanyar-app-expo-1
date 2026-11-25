@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,8 +17,8 @@ import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import { reportAd, reportReasonValues, type ReportReason } from '@/features/ads/api';
-import { AdReportLoginModal } from '@/features/ads/AdReportLoginModal';
 import { getAuthErrorMessage } from '@/features/auth/api';
+import { LoginRequiredModal } from '@/features/auth/LoginRequiredModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/store/authStore';
 
@@ -35,6 +35,8 @@ const reasonLabels: Record<ReportReason, string> = {
   other: strings.tabs.adReportReasonOther,
 };
 
+const reportSuccessRedirectDelay = 2500;
+
 export default function AdReportScreen() {
   const { shortLink: rawShortLink } = useLocalSearchParams<{ shortLink: string | string[] }>();
   const shortLink = Array.isArray(rawShortLink) ? rawShortLink[0] : rawShortLink;
@@ -47,6 +49,14 @@ export default function AdReportScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  useEffect(() => {
+    if (!isSubmitted || !shortLink) return;
+    const timeout = setTimeout(() => {
+      router.replace({ pathname: '/ad/[shortLink]', params: { shortLink } });
+    }, reportSuccessRedirectDelay);
+    return () => clearTimeout(timeout);
+  }, [isSubmitted, shortLink]);
 
   const openLogin = () => {
     if (!shortLink) return;
@@ -99,6 +109,15 @@ export default function AdReportScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {isSubmitted ? (
+        <View
+          accessibilityRole="alert"
+          style={[styles.successBanner, { backgroundColor: colors.backgroundElement }]}>
+          <Text style={[styles.successMessage, { color: colors.success }]}>
+            {strings.tabs.adReportSuccess}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{strings.tabs.adReportTitle}</Text>
         <Pressable
@@ -119,69 +138,65 @@ export default function AdReportScreen() {
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled">
-          {isSubmitted ? (
-            <Text accessibilityRole="alert" style={[styles.successMessage, { color: colors.success }]}>
-              {strings.tabs.adReportSuccess}
-            </Text>
-          ) : (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {strings.tabs.adReportReasonTitle}
-              </Text>
-              <View style={[styles.reasonList, { borderColor: colors.border }]}>
-                {reportReasonValues.map((reason, index) => (
-                  <Pressable
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selectedReason === reason }}
-                    key={reason}
-                    onPress={() => {
-                      setSelectedReason(reason);
-                      setErrorMessage('');
-                    }}
-                    style={[
-                      styles.reasonOption,
-                      index < reportReasonValues.length - 1
-                        ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
-                        : null,
-                    ]}>
-                    <Text style={[styles.reasonLabel, { color: colors.text }]}>
-                      {reasonLabels[reason]}
-                    </Text>
-                    <View
-                      style={[
-                        styles.radioOuter,
-                        { borderColor: selectedReason === reason ? colors.primary : colors.textSubtle },
-                      ]}>
-                      {selectedReason === reason ? (
-                        <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />
-                      ) : null}
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>
-                {strings.tabs.adReportDescriptionLabel}
-              </Text>
-              <TextInput
-                accessibilityLabel={strings.tabs.adReportDescriptionLabel}
-                maxLength={2000}
-                multiline
-                onChangeText={setDescription}
-                placeholder={strings.tabs.adReportDescriptionPlaceholder}
-                placeholderTextColor={colors.textSubtle}
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {strings.tabs.adReportReasonTitle}
+          </Text>
+          <View style={[styles.reasonList, { borderColor: colors.border }]}>
+            {reportReasonValues.map((reason, index) => (
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selectedReason === reason, disabled: isSubmitted }}
+                disabled={isSubmitted}
+                key={reason}
+                onPress={() => {
+                  setSelectedReason(reason);
+                  setErrorMessage('');
+                }}
                 style={[
-                  styles.descriptionInput,
-                  { backgroundColor: colors.backgroundElement, color: colors.text },
-                ]}
-                textAlign="right"
-                textAlignVertical="top"
-                value={description}
-              />
-              <Text style={[styles.characterCount, { color: colors.textSubtle }]}>
-                {description.length}/۲۰۰۰
-              </Text>
-            </>
-          )}
+                  styles.reasonOption,
+                  index < reportReasonValues.length - 1
+                    ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
+                    : null,
+                ]}>
+                <Text style={[styles.reasonLabel, { color: colors.text }]}>
+                  {reasonLabels[reason]}
+                </Text>
+                <View
+                  style={[
+                    styles.radioOuter,
+                    { borderColor: selectedReason === reason ? colors.primary : colors.textSubtle },
+                  ]}>
+                  {selectedReason === reason ? (
+                    <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />
+                  ) : null}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.descriptionLabelRow}>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>
+              {strings.tabs.adReportDescriptionLabel}
+            </Text>
+            <Text style={[styles.optionalLabel, { color: colors.textSubtle }]}>
+              {strings.tabs.adReportDescriptionOptional}
+            </Text>
+          </View>
+          <TextInput
+            accessibilityLabel={strings.tabs.adReportDescriptionLabel}
+            editable={!isSubmitted}
+            maxLength={2000}
+            multiline
+            onChangeText={setDescription}
+            placeholder={strings.tabs.adReportDescriptionPlaceholder}
+            placeholderTextColor={colors.textSubtle}
+            style={[
+              styles.descriptionInput,
+              { backgroundColor: colors.backgroundElement, color: colors.text },
+            ]}
+            textAlign="right"
+            textAlignVertical="top"
+            value={description}
+          />
           {errorMessage ? (
             <Text accessibilityRole="alert" style={[styles.errorMessage, { color: colors.error }]}>
               {errorMessage}
@@ -240,10 +255,14 @@ export default function AdReportScreen() {
           </>
         )}
       </View>
-      <AdReportLoginModal
+      <LoginRequiredModal
+        actionLabel={strings.tabs.adReportLoginAction}
         colors={colors}
+        cancelLabel={strings.tabs.adReportLoginCancel}
+        message={strings.tabs.adReportLoginRequired}
         onClose={() => setShowLoginPrompt(false)}
         onLogin={openLogin}
+        title={strings.tabs.adReportLoginTitle}
         visible={showLoginPrompt}
       />
     </SafeAreaView>
@@ -263,6 +282,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '600', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four, paddingBottom: Spacing.three },
+  successBanner: { marginHorizontal: Spacing.three, marginTop: Spacing.two, padding: Spacing.three, borderRadius: 10 },
+  successMessage: { fontSize: 13, fontWeight: '500', lineHeight: 22, textAlign: 'right' },
   sectionTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
   reasonList: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.three },
   reasonOption: {
@@ -283,16 +304,18 @@ const styles = StyleSheet.create({
   },
   radioInner: { borderRadius: 5, height: 10, width: 10 },
   inputLabel: { fontSize: 14, fontWeight: '500', textAlign: 'right' },
+  descriptionLabelRow: { alignItems: 'baseline', flexDirection: 'row-reverse', gap: Spacing.one },
+  optionalLabel: { fontSize: 11, textAlign: 'right' },
   descriptionInput: {
     borderRadius: 10,
     fontFamily: 'IRANSans',
     fontSize: 14,
     minHeight: 112,
     padding: Spacing.three,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  characterCount: { fontSize: 11, textAlign: 'left' },
   errorMessage: { fontSize: 13, lineHeight: 22, textAlign: 'right' },
-  successMessage: { fontSize: 16, fontWeight: '600', lineHeight: 28, textAlign: 'center' },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',

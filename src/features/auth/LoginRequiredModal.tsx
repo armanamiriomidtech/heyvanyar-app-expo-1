@@ -1,35 +1,42 @@
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText as Text } from '@/components/app-text';
-import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 
-export function AdReportLoginModal({
+export function LoginRequiredModal({
+  actionLabel,
   colors,
+  cancelLabel,
+  message,
   onClose,
   onLogin,
+  title,
   visible,
 }: {
+  actionLabel: string;
   colors: (typeof Colors)[keyof typeof Colors];
+  cancelLabel: string;
+  message: string;
   onClose: () => void;
   onLogin: () => void;
+  title: string;
   visible: boolean;
 }) {
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.overlay}>
         <Pressable
-          accessibilityLabel={strings.tabs.adReportLoginCancel}
+          accessibilityLabel={cancelLabel}
           accessibilityRole="button"
           onPress={onClose}
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: 0.45 }]}
         />
         <View style={[styles.sheet, { backgroundColor: colors.background }]}>
           <Text style={[styles.title, { color: colors.text }]}>
-            {strings.tabs.adReportLoginTitle}
+            {title}
           </Text>
           <Text style={[styles.message, { color: colors.textSecondary }]}>
-            {strings.tabs.adReportLoginRequired}
+            {message}
           </Text>
           <View style={styles.actions}>
             <Pressable
@@ -42,7 +49,7 @@ export function AdReportLoginModal({
                 pressed ? styles.pressed : null,
               ]}>
               <Text style={[styles.buttonText, { color: colors.text }]}>
-                {strings.tabs.adReportLoginCancel}
+                {cancelLabel}
               </Text>
             </Pressable>
             <Pressable
@@ -54,7 +61,7 @@ export function AdReportLoginModal({
                 pressed ? styles.pressed : null,
               ]}>
               <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
-                {strings.tabs.adReportLoginAction}
+                {actionLabel}
               </Text>
             </Pressable>
           </View>
