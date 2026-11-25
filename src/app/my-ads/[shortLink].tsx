@@ -4,7 +4,7 @@ import { SymbolView } from 'expo-symbols';
 import { useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +32,7 @@ export default function MyAdManagementScreen() {
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const [actionError, setActionError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const chartScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const adQuery = useQuery({
     queryKey: ['my-ad', shortLink],
@@ -40,13 +41,14 @@ export default function MyAdManagementScreen() {
     retry: false,
   });
   const adId = adQuery.data?.id;
+  const isDeleted = adQuery.data?.status === 'deleted';
   const viewStatsQuery = useQuery({
     queryKey: ['ad-view-stats', adId],
     queryFn: () => {
       if (adId == null) throw new Error(strings.auth.invalidResponse);
       return getAdViewStats(adId);
     },
-    enabled: adId != null && !isPreview,
+    enabled: adId != null && !isPreview && !isDeleted,
     retry: false,
   });
   const maxViewCount = Math.max(
@@ -62,27 +64,26 @@ export default function MyAdManagementScreen() {
   if (isPreview) return <MyAdPreviewScreen />;
 
   const handleDelete = () => {
-    if (!shortLink || isDeleting) return;
-    Alert.alert(strings.tabs.deleteAdTitle, strings.tabs.deleteAdConfirm, [
-      { text: strings.common.back, style: 'cancel' },
-      {
-        text: strings.tabs.deleteAd,
-        style: 'destructive',
-        onPress: () => {
-          setIsDeleting(true);
-          setActionError('');
-          void deleteMyAd(shortLink)
-            .then(async () => {
-              await queryClient.invalidateQueries({ queryKey: ['my-ads'] });
-              router.replace('/my-ads');
-            })
-            .catch((error: unknown) => {
-              setActionError(getAuthErrorMessage(error, strings.tabs.adDeleteError));
-            })
-            .finally(() => setIsDeleting(false));
-        },
-      },
-    ]);
+    if (adId == null || isDeleting) return;
+    setActionError('');
+    setShowDeleteConfirmation(true);
+  };
+
+  const confirmDelete = async () => {
+    if (adId == null || isDeleting) return;
+    setIsDeleting(true);
+    setActionError('');
+    try {
+      await deleteMyAd(adId);
+      await queryClient.invalidateQueries({ queryKey: ['my-ads'] });
+      setShowDeleteConfirmation(false);
+      router.replace('/my-ads');
+    } catch (error) {
+      setActionError(getAuthErrorMessage(error, strings.tabs.adDeleteError));
+      setShowDeleteConfirmation(false);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!shortLink) {
@@ -125,69 +126,76 @@ export default function MyAdManagementScreen() {
         <BackToMyAdsButton colors={colors} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.chartCard, { backgroundColor: colors.backgroundElement }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {strings.tabs.adViewsTitle}
-          </Text>
-          {viewStatsQuery.isPending ? (
-            <ActivityIndicator color={colors.textSecondary} />
-          ) : viewStatsQuery.isError ? (
-            <Text accessibilityRole="alert" style={[styles.message, { color: colors.error }]}>
-              {getAuthErrorMessage(viewStatsQuery.error, strings.tabs.adViewStatsError)}
+        {isDeleted ? null : (
+          <View style={[styles.chartCard, { backgroundColor: colors.backgroundElement }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {strings.tabs.adViewsTitle}
             </Text>
-          ) : (
-            <>
-              <Text style={[styles.totalViews, { color: colors.text }]}>
-                {new Intl.NumberFormat('fa-IR').format(viewStatsQuery.data.total)}
+            {viewStatsQuery.isPending ? (
+              <ActivityIndicator color={colors.textSecondary} />
+            ) : viewStatsQuery.isError ? (
+              <Text accessibilityRole="alert" style={[styles.message, { color: colors.error }]}>
+                {getAuthErrorMessage(viewStatsQuery.error, strings.tabs.adViewStatsError)}
               </Text>
-              <Text style={[styles.chartCaption, { color: colors.textSecondary }]}>
-                {viewStatsQuery.data.granularity === 'hour'
-                  ? strings.tabs.adViewsHourCaption
-                  : strings.tabs.adViewsDayCaption}
-              </Text>
-              <ScrollView
-                ref={chartScrollRef}
-                horizontal
-                contentOffset={{ x: 0, y: 0 }}
-                onContentSizeChange={() =>
-                  chartScrollRef.current?.scrollTo({ x: 0, animated: false })
-                }
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chartScrollContent}
-                style={styles.chartScroll}>
-                <View
-                  accessibilityLabel={strings.tabs.adViewsTitle}
-                  style={[styles.chart, { width: chartWidth }]}>
-                  {viewStatsQuery.data.series.map((item , index) => {
-                    const barHeight =
-                      item.value === 0
-                        ? '0%'
-                        : `${Math.max(4, (item.value / maxViewCount) * 100)}%`;
-                    return (
-                      <View key={index} style={styles.chartColumn}>
-                        <Text style={[styles.chartValue, { color: colors.textSecondary }]}>
-                          {new Intl.NumberFormat('fa-IR').format(item.value)}
-                        </Text>
-                        <View style={styles.barTrack}>
-                          <View
-                            style={[
-                              styles.bar,
-                              { backgroundColor: colors.textSecondary, height: barHeight },
-                            ]}
-                          />
+            ) : (
+              <>
+                <Text style={[styles.totalViews, { color: colors.text }]}>
+                  {new Intl.NumberFormat('fa-IR').format(viewStatsQuery.data.total)}
+                </Text>
+                <Text style={[styles.chartCaption, { color: colors.textSecondary }]}>
+                  {viewStatsQuery.data.granularity === 'hour'
+                    ? strings.tabs.adViewsHourCaption
+                    : strings.tabs.adViewsDayCaption}
+                </Text>
+                <ScrollView
+                  ref={chartScrollRef}
+                  horizontal
+                  contentOffset={{ x: 0, y: 0 }}
+                  onContentSizeChange={() =>
+                    chartScrollRef.current?.scrollTo({ x: 0, animated: false })
+                  }
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chartScrollContent}
+                  style={styles.chartScroll}>
+                  <View
+                    accessibilityLabel={strings.tabs.adViewsTitle}
+                    style={[styles.chart, { width: chartWidth }]}>
+                    {viewStatsQuery.data.series.map((item, index) => {
+                      const barHeight =
+                        item.value === 0
+                          ? '0%'
+                          : `${Math.max(4, (item.value / maxViewCount) * 100)}%`;
+                      return (
+                        <View key={index} style={styles.chartColumn}>
+                          <Text style={[styles.chartValue, { color: colors.textSecondary }]}>
+                            {new Intl.NumberFormat('fa-IR').format(item.value)}
+                          </Text>
+                          <View style={styles.barTrack}>
+                            <View
+                              style={[
+                                styles.bar,
+                                { backgroundColor: colors.textSecondary, height: barHeight },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.chartDay, { color: colors.textSecondary }]}>
+                            {item.label}
+                          </Text>
                         </View>
-                        <Text style={[styles.chartDay, { color: colors.textSecondary }]}>
-                          {item.label}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </>
-          )}
-        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        )}
 
+        {isDeleted ? (
+          <Text style={[styles.deletedNotice, { color: colors.error }]}>
+            {strings.tabs.myAdDeletedNotice}
+          </Text>
+        ) : null}
         <View style={[styles.menu, { backgroundColor: colors.backgroundElement }]}>
           <MenuItem
             colors={colors}
@@ -200,25 +208,29 @@ export default function MyAdManagementScreen() {
             }
             symbol="eye"
           />
-          <MenuItem
-            colors={colors}
-            label={strings.tabs.editAd}
-            onPress={() =>
-              router.push({
-                pathname: '/(tabs)/ads',
-                params: { shortLink },
-              })
-            }
-            symbol="pencil"
-          />
-          <MenuItem
-            colors={colors}
-            disabled={isDeleting}
-            destructive
-            label={isDeleting ? strings.tabs.deletingAd : strings.tabs.deleteAd}
-            onPress={handleDelete}
-            symbol={isDeleting ? undefined : 'trash'}
-          />
+          {isDeleted ? null : (
+            <>
+              <MenuItem
+                colors={colors}
+                label={strings.tabs.editAd}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/ads',
+                    params: { shortLink },
+                  })
+                }
+                symbol="pencil"
+              />
+              <MenuItem
+                colors={colors}
+                disabled={isDeleting}
+                destructive
+                label={isDeleting ? strings.tabs.deletingAd : strings.tabs.deleteAd}
+                onPress={handleDelete}
+                symbol={isDeleting ? undefined : 'trash'}
+              />
+            </>
+          )}
         </View>
         {actionError ? (
           <Text accessibilityRole="alert" style={[styles.error, { color: colors.error }]}>
@@ -226,6 +238,63 @@ export default function MyAdManagementScreen() {
           </Text>
         ) : null}
       </ScrollView>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isDeleting) setShowDeleteConfirmation(false);
+        }}
+        transparent
+        visible={showDeleteConfirmation}>
+        <View style={styles.deleteModalOverlay}>
+          <Pressable
+            accessibilityLabel={strings.tabs.deleteAdCancel}
+            accessibilityRole="button"
+            disabled={isDeleting}
+            onPress={() => setShowDeleteConfirmation(false)}
+            style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: 0.45 }]}
+          />
+          <View style={[styles.deleteConfirmSheet, { backgroundColor: colors.background }]}>
+            <Text style={[styles.deleteConfirmMessage, { color: colors.text }]}>
+              {strings.tabs.deleteAdConfirm}
+            </Text>
+            <View style={styles.deleteConfirmActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isDeleting}
+                onPress={() => setShowDeleteConfirmation(false)}
+                style={({ pressed }) => [
+                  styles.deleteConfirmButton,
+                  { borderColor: colors.primary },
+                  pressed && !isDeleting ? styles.pressed : null,
+                  isDeleting ? styles.disabled : null,
+                ]}>
+                <Text style={[styles.deleteConfirmButtonText, { color: colors.primary }]}>
+                  {strings.tabs.deleteAdCancel}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isDeleting }}
+                disabled={isDeleting}
+                onPress={() => void confirmDelete()}
+                style={({ pressed }) => [
+                  styles.deleteConfirmButton,
+                  { borderColor: colors.error },
+                  pressed && !isDeleting ? styles.pressed : null,
+                  isDeleting ? styles.disabled : null,
+                ]}>
+                {isDeleting ? (
+                  <ActivityIndicator color={colors.error} />
+                ) : (
+                  <Text style={[styles.deleteConfirmButtonText, { color: colors.error }]}>
+                    {strings.tabs.deleteAdConfirmAction}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -325,6 +394,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  deletedNotice: { fontSize: 15, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   content: { flexGrow: 1, gap: Spacing.four, padding: Spacing.four },
   chartCard: { borderRadius: 14, gap: Spacing.two, padding: Spacing.three },
@@ -359,6 +429,26 @@ const styles = StyleSheet.create({
   message: { fontSize: 15, lineHeight: 24, textAlign: 'center' },
   retryButton: { padding: Spacing.two },
   error: { fontSize: 14, lineHeight: 22, textAlign: 'right' },
+  deleteModalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  deleteConfirmSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    gap: Spacing.four,
+    padding: Spacing.three,
+    paddingBottom: Spacing.four,
+  },
+  deleteConfirmMessage: { fontSize: 14, lineHeight: 24, textAlign: 'center' },
+  deleteConfirmActions: { flexDirection: 'row-reverse', gap: Spacing.two },
+  deleteConfirmButton: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  deleteConfirmButtonText: { fontSize: 15, fontWeight: '500', textAlign: 'center' },
   disabled: { opacity: 0.6 },
   pressed: { opacity: 0.7 },
 });

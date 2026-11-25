@@ -10,6 +10,7 @@ import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import { getMyAds, type MyAd } from '@/features/ads/api';
 import { getAuthErrorMessage } from '@/features/auth/api';
+import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function MyAdsScreen() {
@@ -90,6 +91,14 @@ function MyAdRow({
   const price = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 2 }).format(
     Number(ad.price),
   );
+  const status = getAdStatusDisplay(ad.status);
+  const relativeTime = ad.publishAt
+    ? formatPersianRelativeTime(ad.publishAt).replace(/ قبل$/, ' پیش')
+    : '';
+  const location = ad.location
+    ? [ad.location.parentLocation?.title, ad.location.title].filter(Boolean).join('/')
+    : '';
+  const publishDetails = [relativeTime, location].filter(Boolean).join(' در ');
 
   return (
     <Pressable
@@ -123,6 +132,16 @@ function MyAdRow({
         <Text style={[styles.price, { color: colors.text }]}>
           {price} {strings.tabs.priceUnit}
         </Text>
+        {status ? (
+          <Text style={[styles.adStatus, { color: status.color , fontWeight: '500'}]}>
+            {status.label}
+          </Text>
+        ) : null}
+        {publishDetails ? (
+          <Text numberOfLines={1} style={[styles.publishDetails, { color: colors.textSecondary }]}>
+            {publishDetails}
+          </Text>
+        ) : null}
       </View>
       <SymbolView
         name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
@@ -131,6 +150,24 @@ function MyAdRow({
       />
     </Pressable>
   );
+}
+
+function getAdStatusDisplay(status: MyAd['status']): { label: string; color: string } | null {
+  switch (status) {
+    case 'created':
+    case 'updated':
+      return { label: strings.tabs.myAdStatusPending, color: '#B77900' };
+    case 'deleted':
+      return { label: strings.tabs.myAdStatusInactive, color: Colors.light.error };
+    case 'expired':
+      return { label: strings.tabs.myAdStatusExpired, color: Colors.light.error };
+    case 'reported':
+      return { label: strings.tabs.myAdStatusReported, color: Colors.light.error };
+    case 'published':
+      return { label: strings.tabs.myAdStatusPublished, color: Colors.light.success };
+    default:
+      return null;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -151,15 +188,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row-reverse',
     gap: Spacing.two,
-    minHeight: 104,
+    minHeight: 120,
     paddingVertical: Spacing.two,
   },
-  image: { borderRadius: 10, height: 84, width: 96 },
+  image: { borderRadius: 10, height: 96, width: 96 },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center', padding: Spacing.two },
   placeholderText: { fontSize: 12, textAlign: 'center' },
-  adDetails: { alignItems: 'flex-end', flex: 1, gap: Spacing.two },
+  adDetails: { alignItems: 'flex-end', flex: 1, gap: Spacing.one },
   adTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
   price: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  adStatus: { fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  publishDetails: { fontSize: 11, textAlign: 'right' },
   separator: { backgroundColor: Colors.light.border, height: StyleSheet.hairlineWidth },
   pressed: { opacity: 0.7 },
 });

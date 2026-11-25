@@ -4,7 +4,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/app-text';
@@ -47,6 +56,7 @@ export default function MyAdPreviewScreen({
   });
   const [viewTrackingError, setViewTrackingError] = useState('');
   const [mapError, setMapError] = useState('');
+  const [selectedMedia, setSelectedMedia] = useState<MediaSlide | null>(null);
   const adId = adQuery.data?.id;
 
   const openChat = () => {
@@ -128,6 +138,9 @@ export default function MyAdPreviewScreen({
     Number(ad.price),
   );
   const relativeTime = formatPersianRelativeTime(ad.publishAt);
+  const locationLabel = ad.location
+    ? [ad.location.parentLocation?.title, ad.location.title].filter(Boolean).join('/')
+    : '';
   const coordinate: MapCoordinates | null =
     typeof ad.latitude === 'number' && typeof ad.longitude === 'number'
       ? { latitude: ad.latitude, longitude: ad.longitude }
@@ -164,7 +177,11 @@ export default function MyAdPreviewScreen({
               keyExtractor={(item) => item.key}
               pagingEnabled
               renderItem={({ item }) => (
-                <View style={[styles.slide, { height: mediaHeight, width }]}>
+                <Pressable
+                  accessibilityLabel={strings.tabs.adMediaViewerOpen}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedMedia(item)}
+                  style={[styles.slide, { height: mediaHeight, width }]}>
                   {item.type === 'video' ? (
                     <AdVideoSlide height={mediaHeight} uri={item.uri} />
                   ) : (
@@ -175,7 +192,7 @@ export default function MyAdPreviewScreen({
                       style={{ height: mediaHeight, width }}
                     />
                   )}
-                </View>
+                </Pressable>
               )}
               showsHorizontalScrollIndicator={false}
             />
@@ -201,27 +218,65 @@ export default function MyAdPreviewScreen({
         </View>
 
         <View style={styles.details}>
-          {ad.category ? (
-            <Text style={[styles.category, { color: colors.textSecondary }]}>
-              {ad.category.parent
-                ? `${ad.category.parent.title} / ${ad.category.title}`
-                : ad.category.title}
-            </Text>
-          ) : null}
           <Text style={[styles.title, { color: colors.text }]}>{ad.title}</Text>
           {relativeTime ? (
             <Text style={[styles.publishedAt, { color: colors.textSecondary }]}>
               {strings.tabs.adPublishedAt(relativeTime)}
+              {locationLabel ? ` در ${locationLabel}` : ''}
             </Text>
           ) : null}
-          <Text style={[styles.price, { color: colors.textSecondary }]}>
-            {price} {strings.tabs.priceUnit}
-          </Text>
+          <Pressable
+            accessibilityLabel={strings.tabs.adSafetyLink}
+            accessibilityRole="button"
+            onPress={() => router.push('/ad/safety')}
+            style={({ pressed }) => [
+              styles.safetyLink,
+              { backgroundColor: colors.backgroundElement },
+              pressed ? styles.pressed : null,
+            ]}>
+            <SymbolView
+              name={{
+                ios: 'exclamationmark.triangle.fill',
+                android: 'warning',
+                web: 'warning',
+              }}
+              size={18}
+              tintColor={colors.primary}
+            />
+            <Text style={[styles.safetyLinkText, { color: colors.text }]}>
+              {strings.tabs.adSafetyLink}
+            </Text>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+              size={18}
+              tintColor={colors.textSecondary}
+            />
+          </Pressable>
+          <View>
+            <AdDetailRow
+              colors={colors}
+              divider
+              label={strings.tabs.adPriceDisplayLabel}
+              value={`${price} ${strings.tabs.priceUnit}`}
+            />
+            {ad.category?.parent?.title ? (
+              <AdDetailRow
+                colors={colors}
+                divider
+                label={strings.tabs.adTypeDisplayLabel}
+                value={ad.category.parent.title}
+              />
+            ) : null}
+            {ad.category?.title ? (
+              <AdDetailRow
+                colors={colors}
+                label={strings.tabs.adBreedDisplayLabel}
+                value={ad.category.title}
+              />
+            ) : null}
+          </View>
           <Text style={[styles.description, { color: colors.text }]}>{ad.description}</Text>
           <View style={styles.mapSection}>
-            <Text style={[styles.mapTitle, { color: colors.text }]}>
-              {strings.tabs.adLocationMapLabel}
-            </Text>
             {coordinate ? (
               <>
                 <NeshanMap
@@ -233,10 +288,6 @@ export default function MyAdPreviewScreen({
                   onError={() => setMapError(strings.tabs.neshanMapLoadError)}
                   textColor={colors.text}
                 />
-                <Text style={[styles.mapCoordinates, { color: colors.textSecondary }]}>
-                  {strings.tabs.adCoordinateSelected}: {coordinate.latitude.toFixed(6)},{' '}
-                  {coordinate.longitude.toFixed(6)}
-                </Text>
               </>
             ) : (
               <Text style={[styles.mapCoordinates, { color: colors.textSecondary }]}>
@@ -292,6 +343,12 @@ export default function MyAdPreviewScreen({
           </Pressable>
         </View>
       ) : null}
+      <FullscreenMediaModal
+        height={height}
+        media={selectedMedia}
+        onClose={() => setSelectedMedia(null)}
+        width={width}
+      />
     </SafeAreaView>
   );
 }
@@ -302,10 +359,98 @@ function AdVideoSlide({ height, uri }: { height: number; uri: string }) {
   return (
     <VideoView
       contentFit="contain"
-      nativeControls
       player={player}
       style={{ height, width: '100%' }}
     />
+  );
+}
+
+function FullscreenMediaModal({
+  height,
+  media,
+  onClose,
+  width,
+}: {
+  height: number;
+  media: MediaSlide | null;
+  onClose: () => void;
+  width: number;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      transparent
+      visible={media !== null}>
+      <View style={styles.viewer}>
+        <Pressable
+          accessibilityLabel={strings.tabs.adMediaViewerClose}
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.viewerDismissArea}
+        />
+        <View style={[styles.viewerMedia, { height: height * 0.84, width }]}>
+          {media?.type === 'image' ? (
+            <Image contentFit="contain" source={{ uri: media.uri }} style={styles.viewerImage} />
+          ) : media?.type === 'video' ? (
+            <FullscreenAdVideo height={height * 0.84} uri={media.uri} width={width} />
+          ) : null}
+        </View>
+        <Pressable
+          accessibilityLabel={strings.tabs.adMediaViewerClose}
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.viewerDismissArea}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function FullscreenAdVideo({
+  height,
+  uri,
+  width,
+}: {
+  height: number;
+  uri: string;
+  width: number;
+}) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.play();
+  });
+
+  return (
+    <VideoView
+      contentFit="contain"
+      nativeControls
+      player={player}
+      style={{ height, width }}
+    />
+  );
+}
+
+function AdDetailRow({
+  colors,
+  divider = false,
+  label,
+  value,
+}: {
+  colors: (typeof Colors)[keyof typeof Colors];
+  divider?: boolean;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.adDetailRow,
+        divider ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
+      ]}>
+      <Text style={[styles.adDetailLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.adDetailValue, { color: colors.text }]}>{value}</Text>
+    </View>
   );
 }
 
@@ -439,12 +584,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.surfaceMuted,
     justifyContent: 'center',
   },
+  viewer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.94)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  viewerDismissArea: { flex: 1, width: '100%' },
+  viewerMedia: { alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { height: '100%', width: '100%' },
   mediaPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   placeholderText: { fontSize: 14, textAlign: 'center' },
   details: { gap: Spacing.two, padding: Spacing.four },
   mapSection: { gap: Spacing.two, marginTop: Spacing.two },
-  mapTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
   mapCoordinates: { fontSize: 12, textAlign: 'right' },
+  adDetailRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: Spacing.one,
+  },
+  adDetailLabel: { fontSize: 13, textAlign: 'right' },
+  adDetailValue: { fontSize: 14, fontWeight: '500', textAlign: 'left' },
+  safetyLink: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
+    minHeight: 48,
+    paddingHorizontal: Spacing.three,
+  },
+  safetyLinkText: { flex: 1, fontSize: 14, fontWeight: '500', textAlign: 'right' },
   contactActions: {
     borderTopColor: Colors.light.border,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -462,10 +633,8 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   contactButtonText: { fontSize: 16, fontWeight: '500' },
-  category: { fontSize: 10, textAlign: 'right' },
   title: { fontSize: 16, fontWeight: '500', lineHeight: 27, textAlign: 'right' },
   publishedAt: { fontSize: 12, textAlign: 'right' },
-  price: { fontSize: 14, fontWeight: '400', textAlign: 'right' },
   description: { fontSize: 15, lineHeight: 27, textAlign: 'right' },
   viewTrackingError: { fontSize: 12, textAlign: 'right' },
   messageHeader: {

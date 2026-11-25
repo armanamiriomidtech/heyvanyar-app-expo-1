@@ -1,3 +1,5 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,8 +10,6 @@ import {
   Switch,
   View,
 } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/app-text';
@@ -19,11 +19,11 @@ import { createAd, updateAd } from '@/features/ads/createAdApi';
 import { useAdDraftStore } from '@/features/ads/draftStore';
 import { deleteStoredMedia } from '@/features/ads/mediaStorage';
 import { MAX_AD_PRICE } from '@/features/ads/priceUtils';
-import { NeshanMap } from '../features/location/NeshanMap';
-import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { getAuthErrorMessage } from '@/features/auth/api';
-import { HttpError } from '@/services/http';
+import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { HttpError } from '@/services/http';
+import { NeshanMap } from '../features/location/NeshanMap';
 
 export default function AdStageThreeScreen() {
   const { shortLink: rawShortLink } = useLocalSearchParams<{ shortLink?: string | string[] }>();
@@ -279,11 +279,7 @@ export default function AdStageThreeScreen() {
           }}
           textColor={colors.text}
         />
-        {hasCoordinates(details) ? (
-          <Text style={[styles.coordinateValue, { color: colors.textSecondary }]}>
-            {strings.tabs.adCoordinateSelected}: {details.latitude.toFixed(6)}, {details.longitude.toFixed(6)}
-          </Text>
-        ) : (
+        {!hasCoordinates(details) && (
           <Text style={[styles.error, { color: colors.error }]}>
             {strings.tabs.adCoordinatesRequired}
           </Text>
@@ -388,7 +384,7 @@ const styles = StyleSheet.create({
   },
   content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
-  sectionLabel: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  sectionLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right' , marginTop: Spacing.two},
   coordinateValue: { fontSize: 13, textAlign: 'right' },
   optionRow: {
     alignItems: 'center',

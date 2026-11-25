@@ -107,12 +107,35 @@ const adMediaSchema = z
   })
   .passthrough();
 
+const adStatusSchema = z.enum([
+  'created',
+  'updated',
+  'deleted',
+  'expired',
+  'reported',
+  'published',
+]);
+
 const myAdSchema = z
   .object({
     id: z.number().int(),
     shortLink: z.string().min(1),
     title: z.string().min(1),
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
+    status: adStatusSchema.optional(),
+    publishAt: z.string().min(1).optional(),
+    location: z
+      .object({
+        title: z.string().min(1),
+        parentLocation: z
+          .object({ title: z.string().min(1) })
+          .passthrough()
+          .nullable()
+          .optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     mainImage: adMediaSchema.nullable().optional(),
     files: z.array(adMediaSchema).optional(),
     video: adMediaSchema.nullable().optional(),
@@ -139,6 +162,7 @@ const adDetailsSchema = z
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
     description: z.string(),
     publishAt: z.string().min(1),
+    status: adStatusSchema.optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     locationId: z.number().int().positive().nullable().optional(),
@@ -148,6 +172,14 @@ const adDetailsSchema = z
         title: z.string().min(1),
         type: z.enum(['ostan', 'shahrestan', 'bakhsh', 'dehestan', 'shahr_roosta']),
         parent: z.number().int().positive().nullable().optional(),
+        parentLocation: z
+          .object({
+            id: z.number().int().positive(),
+            title: z.string().min(1),
+          })
+          .passthrough()
+          .nullable()
+          .optional(),
       })
       .passthrough()
       .nullable()
@@ -299,6 +331,6 @@ export async function getAdViewStats(adId: number): Promise<AdViewStats> {
   return parsed.data;
 }
 
-export async function deleteMyAd(shortLink: string): Promise<void> {
-  await http.request(`/ads/${encodeURIComponent(shortLink)}`, { method: 'DELETE' });
+export async function deleteMyAd(adId: number): Promise<void> {
+  await http.request(`/ads/${adId}`, { method: 'DELETE' });
 }

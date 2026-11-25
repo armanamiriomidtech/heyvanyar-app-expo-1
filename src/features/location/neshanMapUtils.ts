@@ -63,9 +63,9 @@ export function createNeshanMapHtml(
         center: ${center},
         zoom: ${zoom},
         apiKey: ${safeApiKey},
-        interactive: ${editable},
+        interactive: true,
       });
-      ${editable ? "map.addControl(new maplibregl.NavigationControl());" : ''}
+      map.addControl(new maplibregl.NavigationControl());
 
       let marker = null;
       let errorSent = false;
@@ -77,7 +77,7 @@ export function createNeshanMapHtml(
 
       ${
         coordinate
-          ? `marker = new maplibregl.Marker().setLngLat(${JSON.stringify([
+          ? `marker = new maplibregl.Marker({ draggable: false }).setLngLat(${JSON.stringify([
               coordinate.longitude,
               coordinate.latitude,
             ])}).addTo(map);`
