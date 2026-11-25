@@ -105,7 +105,7 @@ export default function ChatConversationScreen({
               if (historyTimeout) clearTimeout(historyTimeout);
               const parsed = chatMessagesResponseSchema.safeParse(response);
               if (parsed.success) {
-                setMessages(parsed.data.messages);
+                setMessages(parsed.data.messages.slice().reverse());
                 setHistoryLoaded(true);
               }
             });
@@ -129,7 +129,7 @@ export default function ChatConversationScreen({
             setHistoryLoaded(true);
             return;
           }
-          setMessages(parsed.data.messages);
+          setMessages(parsed.data.messages.slice().reverse());
           setHistoryLoaded(true);
         });
         socket.on('newMessage', (payload: unknown) => {

@@ -1,6 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Redirect, Stack, ThemeProvider, useSegments } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  Redirect,
+  Stack,
+  ThemeProvider,
+  usePathname,
+  useSegments,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, useColorScheme } from 'react-native';
@@ -10,6 +18,7 @@ import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, FontFamilies, Spacing } from '@/constants/theme';
 import { getOrCreateGuestId } from '@/features/ads/viewTracking';
+import { isPostLoginRouteActive } from '@/features/auth/returnRoute';
 import { useAuthStore } from '@/store/authStore';
 
 SplashScreen.preventAutoHideAsync();
@@ -101,14 +110,19 @@ function AuthNavigation() {
   const status = useAuthStore((state) => state.status);
   const postLoginRoute = useAuthStore((state) => state.postLoginRoute);
   const clearPostLoginRoute = useAuthStore((state) => state.clearPostLoginRoute);
+  const pathname = usePathname();
   const segments = useSegments();
   const rootSegment = segments[0];
 
   useEffect(() => {
-    if (status === 'authenticated' && postLoginRoute && rootSegment !== '(auth)') {
+    if (
+      status === 'authenticated' &&
+      postLoginRoute &&
+      isPostLoginRouteActive(pathname, postLoginRoute)
+    ) {
       clearPostLoginRoute();
     }
-  }, [clearPostLoginRoute, postLoginRoute, rootSegment, status]);
+  }, [clearPostLoginRoute, pathname, postLoginRoute, status]);
 
   if (status === 'unauthenticated') {
     if (rootSegment === 'ad-stage-three') {
@@ -126,9 +140,13 @@ function AuthNavigation() {
       return <Redirect href="/(tabs)" />;
     }
   } else if (status === 'authenticated') {
+    if (postLoginRoute) {
+      return <Redirect href={postLoginRoute} />;
+    }
     if (rootSegment === '(auth)') {
-      return <Redirect href={postLoginRoute ?? '/(tabs)/profile'} />;
-    } else if (
+      return <Redirect href="/(tabs)/profile" />;
+    }
+    if (
       rootSegment !== '(tabs)' &&
       rootSegment !== 'ad-stage-two' &&
       rootSegment !== 'ad-stage-three' &&

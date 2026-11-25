@@ -117,10 +117,10 @@ export default function ChatListScreen() {
               current.map((chat) =>
                 chat._id === pvId
                   ? {
-                      ...chat,
-                      ...(lastMessage ? { lastMessage } : {}),
-                      unreadCount: typeof unreadCount === 'number' ? unreadCount : chat.unreadCount,
-                    }
+                    ...chat,
+                    ...(lastMessage ? { lastMessage } : {}),
+                    unreadCount: typeof unreadCount === 'number' ? unreadCount : chat.unreadCount,
+                  }
                   : chat,
               ),
             );
@@ -214,7 +214,7 @@ export default function ChatListScreen() {
           onPress={() => router.replace('/(tabs)')}
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
           <SymbolView
-            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
             size={22}
             tintColor={colors.text}
           />
@@ -237,7 +237,7 @@ export default function ChatListScreen() {
                 styles.tab,
                 {
                   borderBottomColor: active ? colors.primary : colors.border,
-                  backgroundColor: active ? colors.backgroundElement : colors.background,
+                  // backgroundColor: active ? colors.backgroundElement : colors.background,
                 },
               ]}>
               <Text
@@ -361,11 +361,11 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
   },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  title: {flex: 1,  fontSize: 18, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 40 },
   tabs: {
     flexDirection: 'row-reverse',
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.two,
   },
-  tabText: { fontSize: 14, fontWeight: '600' },
+  tabText: { fontSize: 14, fontWeight: '500' },
   listContent: { flexGrow: 1, paddingHorizontal: Spacing.three },
   chatRow: {
     alignItems: 'center',

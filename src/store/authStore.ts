@@ -23,8 +23,11 @@ export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 export type AuthSession = z.infer<typeof authSessionSchema>;
 export type PostLoginRoute =
   | '/(tabs)/ads'
+  | '/(tabs)/bookmarks'
   | '/(tabs)/chat'
   | '/ad-stage-three'
+  | { pathname: '/ad/[shortLink]'; params: { shortLink: string } }
+  | { pathname: '/ad/report/[shortLink]'; params: { shortLink: string } }
   | { pathname: '/chat/new/[shortLink]'; params: { shortLink: string } }
   | {
       pathname: '/chat/[pvId]';

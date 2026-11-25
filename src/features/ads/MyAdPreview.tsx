@@ -1,10 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/app-text';
@@ -12,14 +21,20 @@ import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import {
   getAdDetails,
+  getAdBookmarkStatus,
   getMyAds,
+  toggleAdBookmark,
   type AdDetails,
   type AdMedia,
   type MyAd,
 } from '@/features/ads/api';
+import { LoginRequiredModal } from '@/features/auth/LoginRequiredModal';
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
+import { getCurrentUser } from '@/features/profile/api';
+import { NeshanMap } from '@/features/location/NeshanMap';
+import type { MapCoordinates } from '@/features/location/neshanMapUtils';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/store/authStore';
 
@@ -33,6 +48,7 @@ export default function MyAdPreviewScreen({
   const { shortLink: rawShortLink } = useLocalSearchParams<{ shortLink: string | string[] }>();
   const shortLink = Array.isArray(rawShortLink) ? rawShortLink[0] : rawShortLink;
   const authStatus = useAuthStore((state) => state.status);
+  const queryClient = useQueryClient();
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const { width, height } = useWindowDimensions();
@@ -43,8 +59,38 @@ export default function MyAdPreviewScreen({
     enabled: Boolean(shortLink),
     retry: false,
   });
+  const currentUserQuery = useQuery({
+    queryKey: ['profile', 'me'],
+    queryFn: getCurrentUser,
+    enabled: showDisabledContactActions && authStatus === 'authenticated',
+    retry: false,
+  });
   const [viewTrackingError, setViewTrackingError] = useState('');
+  const [mapError, setMapError] = useState('');
+  const [selectedMedia, setSelectedMedia] = useState<MediaSlide | null>(null);
+  const [loginPrompt, setLoginPrompt] = useState<'bookmark' | 'report' | null>(null);
+  const [bookmarkError, setBookmarkError] = useState('');
   const adId = adQuery.data?.id;
+  const bookmarkStatusQuery = useQuery({
+    queryKey: ['ad-bookmark-status', adId],
+    queryFn: () => {
+      if (adId == null) throw new Error(strings.auth.invalidResponse);
+      return getAdBookmarkStatus(adId);
+    },
+    enabled: showDisabledContactActions && authStatus === 'authenticated' && adId != null,
+    retry: false,
+  });
+  const toggleBookmarkMutation = useMutation({
+    mutationFn: toggleAdBookmark,
+    onError: (error) => {
+      setBookmarkError(getAuthErrorMessage(error, strings.tabs.adBookmarkToggleError));
+    },
+    onSuccess: (isBookmarked, id) => {
+      setBookmarkError('');
+      queryClient.setQueryData(['ad-bookmark-status', id], isBookmarked);
+      void queryClient.invalidateQueries({ queryKey: ['ad-bookmarks'] });
+    },
+  });
 
   const openChat = () => {
     if (!shortLink) return;
@@ -59,6 +105,42 @@ export default function MyAdPreviewScreen({
       pathname: '/(auth)/login',
       params: { returnTo: 'chat', adShortLink: shortLink },
     });
+  };
+
+  const openReport = () => {
+    if (!shortLink) return;
+    if (authStatus === 'authenticated') {
+      router.push({
+        pathname: '/ad/report/[shortLink]',
+        params: { shortLink },
+      });
+      return;
+    }
+    setLoginPrompt('report');
+  };
+
+  const openLoginForPrompt = () => {
+    if (!shortLink) return;
+    const prompt = loginPrompt;
+    setLoginPrompt(null);
+    router.push({
+      pathname: '/(auth)/login',
+      params: {
+        returnTo: prompt === 'bookmark' ? 'ad-bookmark' : 'ad-report',
+        adShortLink: shortLink,
+      },
+    });
+  };
+
+  const handleBookmarkPress = () => {
+    if (authStatus === 'loading') return;
+    if (authStatus !== 'authenticated') {
+      setLoginPrompt('bookmark');
+      return;
+    }
+    if (adId == null || toggleBookmarkMutation.isPending) return;
+    setBookmarkError('');
+    toggleBookmarkMutation.mutate(adId);
   };
 
   useEffect(() => {
@@ -119,12 +201,27 @@ export default function MyAdPreviewScreen({
   }
 
   const ad = adQuery.data;
+  const isAdOwner =
+    ad.creatorId != null &&
+    currentUserQuery.data != null &&
+    String(ad.creatorId) === String(currentUserQuery.data.id);
+  const isContactActionsDisabled =
+    isAdOwner ||
+    (authStatus === 'authenticated' &&
+      (currentUserQuery.isPending || currentUserQuery.isError));
   const listAd = mediaQuery.data?.find((item) => item.shortLink === shortLink);
   const slides = getMediaSlides(ad, listAd);
   const price = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 2 }).format(
     Number(ad.price),
   );
   const relativeTime = formatPersianRelativeTime(ad.publishAt);
+  const locationLabel = ad.location
+    ? [ad.location.parentLocation?.title, ad.location.title].filter(Boolean).join('/')
+    : '';
+  const coordinate: MapCoordinates | null =
+    typeof ad.latitude === 'number' && typeof ad.longitude === 'number'
+      ? { latitude: ad.latitude, longitude: ad.longitude }
+      : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -140,7 +237,44 @@ export default function MyAdPreviewScreen({
             tintColor={colors.text}
           />
         </Pressable>
+        {showDisabledContactActions ? (
+          <Pressable
+            accessibilityLabel={strings.tabs.adBookmarkAction}
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled: toggleBookmarkMutation.isPending,
+              selected: bookmarkStatusQuery.data === true,
+            }}
+            disabled={toggleBookmarkMutation.isPending}
+            onPress={handleBookmarkPress}
+            style={({ pressed }) => [styles.bookmarkButton, pressed ? styles.pressed : null]}>
+            {bookmarkStatusQuery.data ? (
+              <View style={styles.bookmarkFill}>
+                <View style={[styles.bookmarkFillBody, { backgroundColor: colors.primary }]}>
+                  <View
+                    style={[
+                      styles.bookmarkCutout,
+                      { borderBottomColor: colors.background },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : (
+              <SymbolView
+                name={{ ios: 'bookmark', android: 'bookmark_border', web: 'bookmark_border' }}
+                size={22}
+                tintColor={colors.text}
+              />
+            )}
+          </Pressable>
+        ) : null}
       </View>
+      {showDisabledContactActions && (bookmarkError || bookmarkStatusQuery.isError) ? (
+        <Text style={[styles.bookmarkError, { color: colors.error }]}>
+          {bookmarkError ||
+            getAuthErrorMessage(bookmarkStatusQuery.error, strings.tabs.adBookmarkToggleError)}
+        </Text>
+      ) : null}
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
         <View style={[styles.gallery, { height: mediaHeight }]}>
           {slides.length > 0 ? (
@@ -157,7 +291,11 @@ export default function MyAdPreviewScreen({
               keyExtractor={(item) => item.key}
               pagingEnabled
               renderItem={({ item }) => (
-                <View style={[styles.slide, { height: mediaHeight, width }]}>
+                <Pressable
+                  accessibilityLabel={strings.tabs.adMediaViewerOpen}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedMedia(item)}
+                  style={[styles.slide, { height: mediaHeight, width }]}>
                   {item.type === 'video' ? (
                     <AdVideoSlide height={mediaHeight} uri={item.uri} />
                   ) : (
@@ -168,7 +306,7 @@ export default function MyAdPreviewScreen({
                       style={{ height: mediaHeight, width }}
                     />
                   )}
-                </View>
+                </Pressable>
               )}
               showsHorizontalScrollIndicator={false}
             />
@@ -194,23 +332,108 @@ export default function MyAdPreviewScreen({
         </View>
 
         <View style={styles.details}>
-          {ad.category ? (
-            <Text style={[styles.category, { color: colors.textSecondary }]}>
-              {ad.category.parent
-                ? `${ad.category.parent.title} / ${ad.category.title}`
-                : ad.category.title}
-            </Text>
-          ) : null}
           <Text style={[styles.title, { color: colors.text }]}>{ad.title}</Text>
           {relativeTime ? (
             <Text style={[styles.publishedAt, { color: colors.textSecondary }]}>
               {strings.tabs.adPublishedAt(relativeTime)}
+              {locationLabel ? ` در ${locationLabel}` : ''}
             </Text>
           ) : null}
-          <Text style={[styles.price, { color: colors.textSecondary }]}>
-            {price} {strings.tabs.priceUnit}
-          </Text>
+          <Pressable
+            accessibilityLabel={strings.tabs.adSafetyLink}
+            accessibilityRole="button"
+            onPress={() => router.push('/ad/safety')}
+            style={({ pressed }) => [
+              styles.safetyLink,
+              { backgroundColor: colors.backgroundElement },
+              pressed ? styles.pressed : null,
+            ]}>
+            <SymbolView
+              name={{
+                ios: 'exclamationmark.triangle.fill',
+                android: 'warning',
+                web: 'warning',
+              }}
+              size={18}
+              tintColor={colors.primary}
+            />
+            <Text style={[styles.safetyLinkText, { color: colors.text }]}>
+              {strings.tabs.adSafetyLink}
+            </Text>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+              size={18}
+              tintColor={colors.textSecondary}
+            />
+          </Pressable>
+          <View>
+            <AdDetailRow
+              colors={colors}
+              divider
+              label={strings.tabs.adPriceDisplayLabel}
+              value={`${price} ${strings.tabs.priceUnit}`}
+            />
+            {ad.category?.parent?.title ? (
+              <AdDetailRow
+                colors={colors}
+                divider
+                label={strings.tabs.adTypeDisplayLabel}
+                value={ad.category.parent.title}
+              />
+            ) : null}
+            {ad.category?.title ? (
+              <AdDetailRow
+                colors={colors}
+                label={strings.tabs.adBreedDisplayLabel}
+                value={ad.category.title}
+              />
+            ) : null}
+          </View>
           <Text style={[styles.description, { color: colors.text }]}>{ad.description}</Text>
+          <View style={styles.mapSection}>
+            {coordinate ? (
+              <>
+                <NeshanMap
+                  backgroundColor={colors.backgroundElement}
+                  coordinate={coordinate}
+                  editable={false}
+                  errorColor={colors.error}
+                  height={220}
+                  onError={() => setMapError(strings.tabs.neshanMapLoadError)}
+                  textColor={colors.text}
+                />
+              </>
+            ) : (
+              <Text style={[styles.mapCoordinates, { color: colors.textSecondary }]}>
+                {strings.tabs.adCoordinatesUnavailable}
+              </Text>
+            )}
+            {mapError ? (
+              <Text accessibilityRole="alert" style={[styles.mapCoordinates, { color: colors.error }]}>
+                {mapError}
+              </Text>
+            ) : null}
+            {showDisabledContactActions ? (
+              <Pressable
+                accessibilityLabel={strings.tabs.adReportButton}
+                accessibilityRole="button"
+                onPress={openReport}
+                style={({ pressed }) => [
+                  styles.reportButton,
+                  { borderColor: colors.border },
+                  pressed ? styles.pressed : null,
+                ]}>
+                <SymbolView
+                  name={{ ios: 'flag', android: 'report', web: 'report' }}
+                  size={18}
+                  tintColor={colors.textSecondary}
+                />
+                <Text style={[styles.reportButtonText, { color: colors.text }]}>
+                  {strings.tabs.adReportButton}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
           {viewTrackingError ? (
             <Text accessibilityRole="alert" style={[styles.viewTrackingError, { color: colors.error }]}>
               {viewTrackingError}
@@ -218,27 +441,49 @@ export default function MyAdPreviewScreen({
           ) : null}
         </View>
       </ScrollView>
+      {showDisabledContactActions &&
+      authStatus === 'authenticated' &&
+      currentUserQuery.isError ? (
+        <Text style={[styles.contactIdentityError, { color: colors.error }]}>
+          {getAuthErrorMessage(currentUserQuery.error, strings.tabs.profileLoadingError)}
+        </Text>
+      ) : null}
       {showDisabledContactActions ? (
         <View style={[styles.contactActions, { backgroundColor: colors.background }]}>
           <Pressable
             accessibilityLabel={strings.tabs.chatAction}
             accessibilityRole="button"
+            accessibilityState={{ disabled: isContactActionsDisabled }}
+            disabled={isContactActionsDisabled}
             onPress={openChat}
             style={({ pressed }) => [
               styles.contactButton,
-              { backgroundColor: colors.primary },
-              pressed ? styles.pressed : null,
+              {
+                backgroundColor: isContactActionsDisabled
+                  ? colors.backgroundElement
+                  : colors.primary,
+              },
+              pressed && !isContactActionsDisabled ? styles.pressed : null,
             ]}>
             <SymbolView
               name={{ ios: 'bubble.left.fill', android: 'chat', web: 'chat' }}
               size={20}
-              tintColor={colors.onPrimary}
+              tintColor={isContactActionsDisabled ? colors.textSecondary : colors.onPrimary}
             />
-            <Text style={[styles.contactButtonText, { color: colors.onPrimary }]}>
+            <Text
+              style={[
+                styles.contactButtonText,
+                {
+                  color: isContactActionsDisabled
+                    ? colors.textSecondary
+                    : colors.onPrimary,
+                },
+              ]}>
               {strings.tabs.chatAction}
             </Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={strings.tabs.callAction}
             accessibilityRole="button"
             accessibilityState={{ disabled: true }}
             disabled
@@ -254,6 +499,40 @@ export default function MyAdPreviewScreen({
           </Pressable>
         </View>
       ) : null}
+      <FullscreenMediaModal
+        height={height}
+        media={selectedMedia}
+        onClose={() => setSelectedMedia(null)}
+        width={width}
+      />
+      {showDisabledContactActions && loginPrompt ? (
+        <LoginRequiredModal
+          actionLabel={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginAction
+              : strings.tabs.adReportLoginAction
+          }
+          colors={colors}
+          cancelLabel={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginCancel
+              : strings.tabs.adReportLoginCancel
+          }
+          message={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginRequired
+              : strings.tabs.adReportLoginRequired
+          }
+          onClose={() => setLoginPrompt(null)}
+          onLogin={openLoginForPrompt}
+          title={
+            loginPrompt === 'bookmark'
+              ? strings.tabs.adBookmarkLoginTitle
+              : strings.tabs.adReportLoginTitle
+          }
+          visible
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -264,10 +543,98 @@ function AdVideoSlide({ height, uri }: { height: number; uri: string }) {
   return (
     <VideoView
       contentFit="contain"
-      nativeControls
       player={player}
       style={{ height, width: '100%' }}
     />
+  );
+}
+
+function FullscreenMediaModal({
+  height,
+  media,
+  onClose,
+  width,
+}: {
+  height: number;
+  media: MediaSlide | null;
+  onClose: () => void;
+  width: number;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      transparent
+      visible={media !== null}>
+      <View style={styles.viewer}>
+        <Pressable
+          accessibilityLabel={strings.tabs.adMediaViewerClose}
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.viewerDismissArea}
+        />
+        <View style={[styles.viewerMedia, { height: height * 0.84, width }]}>
+          {media?.type === 'image' ? (
+            <Image contentFit="contain" source={{ uri: media.uri }} style={styles.viewerImage} />
+          ) : media?.type === 'video' ? (
+            <FullscreenAdVideo height={height * 0.84} uri={media.uri} width={width} />
+          ) : null}
+        </View>
+        <Pressable
+          accessibilityLabel={strings.tabs.adMediaViewerClose}
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.viewerDismissArea}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function FullscreenAdVideo({
+  height,
+  uri,
+  width,
+}: {
+  height: number;
+  uri: string;
+  width: number;
+}) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.play();
+  });
+
+  return (
+    <VideoView
+      contentFit="contain"
+      nativeControls
+      player={player}
+      style={{ height, width }}
+    />
+  );
+}
+
+function AdDetailRow({
+  colors,
+  divider = false,
+  label,
+  value,
+}: {
+  colors: (typeof Colors)[keyof typeof Colors];
+  divider?: boolean;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.adDetailRow,
+        divider ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
+      ]}>
+      <Text style={[styles.adDetailLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.adDetailValue, { color: colors.text }]}>{value}</Text>
+    </View>
   );
 }
 
@@ -389,21 +756,89 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.three,
     minHeight: 52,
   },
   headerTitle: { fontSize: 16, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center' },
+  bookmarkButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  bookmarkFill: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    width: 24,
+  },
+  bookmarkFillBody: {
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    height: 22,
+    position: 'relative',
+    width: 18,
+  },
+  bookmarkCutout: {
+    alignSelf: 'center',
+    borderBottomWidth: 7,
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 9,
+    borderRightColor: 'transparent',
+    borderRightWidth: 9,
+    bottom: 0,
+    height: 0,
+    position: 'absolute',
+    width: 0,
+  },
+  bookmarkError: { fontSize: 12, paddingHorizontal: Spacing.three, textAlign: 'right' },
   gallery: { backgroundColor: Colors.light.surfaceMuted, width: '100%' },
   slide: {
     alignItems: 'center',
     backgroundColor: Colors.light.surfaceMuted,
     justifyContent: 'center',
   },
+  viewer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.94)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  viewerDismissArea: { flex: 1, width: '100%' },
+  viewerMedia: { alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { height: '100%', width: '100%' },
   mediaPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   placeholderText: { fontSize: 14, textAlign: 'center' },
   details: { gap: Spacing.two, padding: Spacing.four },
+  mapSection: { gap: Spacing.two, marginTop: Spacing.two },
+  mapCoordinates: { fontSize: 12, textAlign: 'right' },
+  reportButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: Spacing.two,
+  },
+  reportButtonText: { fontSize: 14, fontWeight: '500' },
+  adDetailRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: Spacing.one,
+  },
+  adDetailLabel: { fontSize: 13, textAlign: 'right' },
+  adDetailValue: { fontSize: 14, fontWeight: '500', textAlign: 'left' },
+  safetyLink: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
+    minHeight: 48,
+    paddingHorizontal: Spacing.three,
+  },
+  safetyLinkText: { flex: 1, fontSize: 14, fontWeight: '500', textAlign: 'right' },
   contactActions: {
     borderTopColor: Colors.light.border,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -411,6 +846,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three,
   },
+  contactIdentityError: { fontSize: 12, textAlign: 'right', width: '100%' },
   contactButton: {
     alignItems: 'center',
     borderRadius: 10,
@@ -421,10 +857,8 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   contactButtonText: { fontSize: 16, fontWeight: '500' },
-  category: { fontSize: 10, textAlign: 'right' },
   title: { fontSize: 16, fontWeight: '500', lineHeight: 27, textAlign: 'right' },
   publishedAt: { fontSize: 12, textAlign: 'right' },
-  price: { fontSize: 14, fontWeight: '400', textAlign: 'right' },
   description: { fontSize: 15, lineHeight: 27, textAlign: 'right' },
   viewTrackingError: { fontSize: 12, textAlign: 'right' },
   messageHeader: {

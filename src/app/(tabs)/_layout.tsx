@@ -80,6 +80,19 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="bookmarks"
+        options={{
+          title: strings.tabs.bookmarks,
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{ ios: 'bookmark.fill', android: 'bookmark', web: 'bookmark' }}
+              size={22}
+              tintColor={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: strings.tabs.home,

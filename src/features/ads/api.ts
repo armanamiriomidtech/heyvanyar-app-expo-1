@@ -66,6 +66,22 @@ const adsResponseSchema = z
   })
   .passthrough();
 
+const bookmarkedAdsResponseSchema = z
+  .object({
+    statusCode: z.number(),
+    message: z.string(),
+    data: z.array(adSchema),
+  })
+  .passthrough();
+
+const adBookmarkStatusResponseSchema = z
+  .object({
+    statusCode: z.number(),
+    message: z.string(),
+    data: z.object({ isBookmarked: z.boolean() }),
+  })
+  .passthrough();
+
 const adCategorySuggestionSchema = z
   .object({
     categoryId: z.number().int(),
@@ -107,12 +123,57 @@ const adMediaSchema = z
   })
   .passthrough();
 
+const adStatusSchema = z.enum([
+  'created',
+  'updated',
+  'deleted',
+  'expired',
+  'reported',
+  'published',
+]);
+
+export const reportReasonValues = [
+  'wild_animals',
+  'animal_abuse',
+  'fraud',
+  'illegal_or_unethical',
+  'wrong_category',
+  'wrong_price',
+  'wrong_info',
+  'duplicate_or_spam',
+  'unavailable_or_unresponsive',
+  'other',
+] as const;
+
+const reportReasonSchema = z.enum(reportReasonValues);
+const adReportSchema = z.object({
+  shortLink: z.string().min(1).max(255),
+  reason: reportReasonSchema,
+  description: z.string().max(2000).optional(),
+});
+
+export type ReportReason = z.infer<typeof reportReasonSchema>;
+
 const myAdSchema = z
   .object({
     id: z.number().int(),
     shortLink: z.string().min(1),
     title: z.string().min(1),
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
+    status: adStatusSchema.optional(),
+    publishAt: z.string().min(1).optional(),
+    location: z
+      .object({
+        title: z.string().min(1),
+        parentLocation: z
+          .object({ title: z.string().min(1) })
+          .passthrough()
+          .nullable()
+          .optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     mainImage: adMediaSchema.nullable().optional(),
     files: z.array(adMediaSchema).optional(),
     video: adMediaSchema.nullable().optional(),
@@ -134,11 +195,15 @@ const myAdsResponseSchema = z
 const adDetailsSchema = z
   .object({
     id: z.number().int(),
+    creatorId: z.union([z.number().int(), z.string()]).nullable().optional(),
     shortLink: z.string().min(1),
     title: z.string().min(1),
     price: z.string().regex(/^\d+(?:\.\d+)?$/),
     description: z.string(),
     publishAt: z.string().min(1),
+    status: adStatusSchema.optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
     locationId: z.number().int().positive().nullable().optional(),
     location: z
       .object({
@@ -146,6 +211,14 @@ const adDetailsSchema = z
         title: z.string().min(1),
         type: z.enum(['ostan', 'shahrestan', 'bakhsh', 'dehestan', 'shahr_roosta']),
         parent: z.number().int().positive().nullable().optional(),
+        parentLocation: z
+          .object({
+            id: z.number().int().positive(),
+            title: z.string().min(1),
+          })
+          .passthrough()
+          .nullable()
+          .optional(),
       })
       .passthrough()
       .nullable()
@@ -249,6 +322,30 @@ export async function searchAds({
   return parsed.data.data;
 }
 
+export async function getBookmarkedAds(page = 1, limit = 10): Promise<Ad[]> {
+  const response = await http.request(
+    `/ads/bookmarks?page=${page}&limit=${limit}`,
+    { method: 'GET' },
+  );
+  const parsed = bookmarkedAdsResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data;
+}
+
+export async function getAdBookmarkStatus(adId: number): Promise<boolean> {
+  const response = await http.request(`/ads/bookmarks/status/${adId}`, { method: 'GET' });
+  const parsed = adBookmarkStatusResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data.isBookmarked;
+}
+
+export async function toggleAdBookmark(adId: number): Promise<boolean> {
+  const response = await http.request(`/ads/bookmarks/toggle/${adId}`, { method: 'POST' });
+  const parsed = adBookmarkStatusResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return parsed.data.data.isBookmarked;
+}
+
 export async function searchAdCategories(query: string): Promise<AdCategorySuggestion[]> {
   const response = await http.request(
     `/ads/search/by-category?q=${encodeURIComponent(query)}`,
@@ -297,6 +394,20 @@ export async function getAdViewStats(adId: number): Promise<AdViewStats> {
   return parsed.data;
 }
 
-export async function deleteMyAd(shortLink: string): Promise<void> {
-  await http.request(`/ads/${encodeURIComponent(shortLink)}`, { method: 'DELETE' });
+export async function deleteMyAd(adId: number): Promise<void> {
+  await http.request(`/ads/${adId}`, { method: 'DELETE' });
+}
+
+export async function reportAd(payload: {
+  shortLink: string;
+  reason: ReportReason;
+  description?: string;
+}): Promise<void> {
+  const parsed = adReportSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(strings.tabs.adReportValidationError);
+  await http.request('/ad-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parsed.data),
+  });
 }
