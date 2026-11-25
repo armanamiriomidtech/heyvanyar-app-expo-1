@@ -25,6 +25,7 @@ export type PostLoginRoute =
   | '/(tabs)/ads'
   | '/(tabs)/chat'
   | '/ad-stage-three'
+  | { pathname: '/ad/report/[shortLink]'; params: { shortLink: string } }
   | { pathname: '/chat/new/[shortLink]'; params: { shortLink: string } }
   | {
       pathname: '/chat/[pvId]';

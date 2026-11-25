@@ -10,6 +10,9 @@ export function getLoginReturnParams(params: LoginReturnParams): LoginReturnPara
   if (params.returnTo === 'ads' || params.returnTo === 'ad-stage-three') {
     return { returnTo: params.returnTo };
   }
+  if (params.returnTo === 'ad-report' && params.adShortLink) {
+    return { returnTo: 'ad-report', adShortLink: params.adShortLink };
+  }
   if (params.returnTo === 'chat-list') return { returnTo: 'chat-list' };
   if (params.returnTo === 'chat' && params.adShortLink) {
     return { returnTo: 'chat', adShortLink: params.adShortLink };
@@ -30,6 +33,12 @@ export function getPostLoginRoute(params: LoginReturnParams): PostLoginRoute | u
 
   if (returnParams.returnTo === 'ads') return '/(tabs)/ads';
   if (returnParams.returnTo === 'ad-stage-three') return '/ad-stage-three';
+  if (returnParams.returnTo === 'ad-report' && returnParams.adShortLink) {
+    return {
+      pathname: '/ad/report/[shortLink]',
+      params: { shortLink: returnParams.adShortLink },
+    };
+  }
   if (returnParams.returnTo === 'chat-list') return '/(tabs)/chat';
   if (returnParams.returnTo === 'chat' && returnParams.adShortLink) {
     return {

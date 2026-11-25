@@ -26,6 +26,7 @@ import {
   type AdMedia,
   type MyAd,
 } from '@/features/ads/api';
+import { AdReportLoginModal } from '@/features/ads/AdReportLoginModal';
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
@@ -57,6 +58,7 @@ export default function MyAdPreviewScreen({
   const [viewTrackingError, setViewTrackingError] = useState('');
   const [mapError, setMapError] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<MediaSlide | null>(null);
+  const [showReportLoginPrompt, setShowReportLoginPrompt] = useState(false);
   const adId = adQuery.data?.id;
 
   const openChat = () => {
@@ -71,6 +73,27 @@ export default function MyAdPreviewScreen({
     router.push({
       pathname: '/(auth)/login',
       params: { returnTo: 'chat', adShortLink: shortLink },
+    });
+  };
+
+  const openReport = () => {
+    if (!shortLink) return;
+    if (authStatus === 'authenticated') {
+      router.push({
+        pathname: '/ad/report/[shortLink]',
+        params: { shortLink },
+      });
+      return;
+    }
+    setShowReportLoginPrompt(true);
+  };
+
+  const openLoginForReport = () => {
+    if (!shortLink) return;
+    setShowReportLoginPrompt(false);
+    router.push({
+      pathname: '/(auth)/login',
+      params: { returnTo: 'ad-report', adShortLink: shortLink },
     });
   };
 
@@ -299,6 +322,26 @@ export default function MyAdPreviewScreen({
                 {mapError}
               </Text>
             ) : null}
+            {showDisabledContactActions ? (
+              <Pressable
+                accessibilityLabel={strings.tabs.adReportButton}
+                accessibilityRole="button"
+                onPress={openReport}
+                style={({ pressed }) => [
+                  styles.reportButton,
+                  { borderColor: colors.border },
+                  pressed ? styles.pressed : null,
+                ]}>
+                <SymbolView
+                  name={{ ios: 'flag', android: 'report', web: 'report' }}
+                  size={18}
+                  tintColor={colors.textSecondary}
+                />
+                <Text style={[styles.reportButtonText, { color: colors.text }]}>
+                  {strings.tabs.adReportButton}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           {viewTrackingError ? (
             <Text accessibilityRole="alert" style={[styles.viewTrackingError, { color: colors.error }]}>
@@ -349,6 +392,14 @@ export default function MyAdPreviewScreen({
         onClose={() => setSelectedMedia(null)}
         width={width}
       />
+      {showDisabledContactActions ? (
+        <AdReportLoginModal
+          colors={colors}
+          onClose={() => setShowReportLoginPrompt(false)}
+          onLogin={openLoginForReport}
+          visible={showReportLoginPrompt}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -598,6 +649,17 @@ const styles = StyleSheet.create({
   details: { gap: Spacing.two, padding: Spacing.four },
   mapSection: { gap: Spacing.two, marginTop: Spacing.two },
   mapCoordinates: { fontSize: 12, textAlign: 'right' },
+  reportButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: Spacing.two,
+  },
+  reportButtonText: { fontSize: 14, fontWeight: '500' },
   adDetailRow: {
     alignItems: 'center',
     flexDirection: 'row-reverse',

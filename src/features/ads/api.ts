@@ -116,6 +116,28 @@ const adStatusSchema = z.enum([
   'published',
 ]);
 
+export const reportReasonValues = [
+  'wild_animals',
+  'animal_abuse',
+  'fraud',
+  'illegal_or_unethical',
+  'wrong_category',
+  'wrong_price',
+  'wrong_info',
+  'duplicate_or_spam',
+  'unavailable_or_unresponsive',
+  'other',
+] as const;
+
+const reportReasonSchema = z.enum(reportReasonValues);
+const adReportSchema = z.object({
+  shortLink: z.string().min(1).max(255),
+  reason: reportReasonSchema,
+  description: z.string().max(2000).optional(),
+});
+
+export type ReportReason = z.infer<typeof reportReasonSchema>;
+
 const myAdSchema = z
   .object({
     id: z.number().int(),
@@ -333,4 +355,18 @@ export async function getAdViewStats(adId: number): Promise<AdViewStats> {
 
 export async function deleteMyAd(adId: number): Promise<void> {
   await http.request(`/ads/${adId}`, { method: 'DELETE' });
+}
+
+export async function reportAd(payload: {
+  shortLink: string;
+  reason: ReportReason;
+  description?: string;
+}): Promise<void> {
+  const parsed = adReportSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(strings.tabs.adReportValidationError);
+  await http.request('/ad-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(parsed.data),
+  });
 }
