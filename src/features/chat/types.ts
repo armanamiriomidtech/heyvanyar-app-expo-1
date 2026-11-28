@@ -6,7 +6,27 @@ export const chatMessageSchema = z
   .object({
     _id: z.string(),
     senderId: userIdSchema,
-    content: z.object({ text: z.string().optional() }).passthrough(),
+    type: z.enum(['text', 'image', 'video', 'audio', 'file']).optional(),
+    content: z
+      .object({
+        text: z.string().optional(),
+        media: z
+          .object({
+            url: z.string(),
+            thumbnail: z.string().optional(),
+            size: z.number().optional(),
+            format: z.string().optional(),
+          })
+          .optional(),
+      })
+      .passthrough(),
+    repliedTo: z
+      .object({
+        messageId: z.string(),
+        content: z.string(),
+        senderId: userIdSchema,
+      })
+      .optional(),
     createdAt: z.string(),
     isRead: z.boolean().optional(),
     seenBy: z

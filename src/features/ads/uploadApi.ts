@@ -12,6 +12,28 @@ const uploadResultSchema = z
   })
   .strict();
 
+const chatMediaUploadResultSchema = z
+  .object({
+    storedName: z.string().min(1),
+    fullUrl: z.string().url(),
+  })
+  .passthrough();
+
+export async function uploadChatMedia(
+  key: string,
+  uri: string,
+  fileName: string,
+  type: 'image' | 'video',
+  signal: AbortSignal,
+): Promise<{ storedName: string; fullUrl: string; size: number }> {
+  const file = await getStoredMedia(key, uri);
+  const path = type === 'video' ? '/files-v2/upload-video' : '/files-v2/upload-image';
+  const response = await http.uploadFile(path, file, fileName, signal);
+  const parsed = chatMediaUploadResultSchema.safeParse(response);
+  if (!parsed.success) throw new Error(strings.auth.invalidResponse);
+  return { storedName: parsed.data.storedName, fullUrl: parsed.data.fullUrl, size: file.size };
+}
+
 export async function uploadAdImage(
   key: string,
   uri: string,

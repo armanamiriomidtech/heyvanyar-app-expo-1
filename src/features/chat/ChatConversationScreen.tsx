@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
+import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { Redirect, router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -20,6 +24,12 @@ import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, FontFamilies, Spacing } from '@/constants/theme';
 import { getAdDetails } from '@/features/ads/api';
+import { uploadChatMedia } from '@/features/ads/uploadApi';
+import {
+  createMediaKey,
+  deleteStoredMedia,
+  savePickedMedia,
+} from '@/features/ads/mediaStorage';
 import { getAuthErrorMessage } from '@/features/auth/api';
 import { createChatSocket } from '@/features/chat/socket';
 import { formatChatTime } from '@/features/chat/format';
@@ -62,6 +72,16 @@ export default function ChatConversationScreen({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [socketError, setSocketError] = useState('');
   const [sendError, setSendError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{
+    uri: string;
+    type: 'image' | 'video';
+  } | null>(null);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const pickerLock = useRef(false);
   const socketRef = useRef<Socket | null>(null);
   const userId = userQuery.data?.id;
 
@@ -230,9 +250,102 @@ export default function ChatConversationScreen({
       adShortLink: pvId ?? adShortLink,
       messageType: 'text',
       senderId: userId,
+      ...(replyingTo ? { replyTo: replyingTo._id } : {}),
     });
     setDraft('');
+    setReplyingTo(null);
+    setSelectedMessageId(null);
     setSendError('');
+    setActionNotice('');
+  };
+
+  const pickAndUploadMedia = async () => {
+    if (pickerLock.current || isUploadingMedia || !isConnected || userId == null) return;
+    pickerLock.current = true;
+    setIsUploadingMedia(true);
+    setSendError('');
+    setActionNotice('');
+
+    let storedMedia: Awaited<ReturnType<typeof savePickedMedia>> | null = null;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setSendError(strings.tabs.mediaPermissionDenied);
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+      });
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      if (!asset) throw new Error(strings.auth.invalidResponse);
+      const mediaType =
+        asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image';
+      setPendingUpload({ uri: asset.uri, type: mediaType });
+      storedMedia = await savePickedMedia(asset, createMediaKey());
+      setPendingUpload({ uri: storedMedia.previewUri, type: mediaType });
+
+      const controller = new AbortController();
+      const uploaded = await uploadChatMedia(
+        storedMedia.key,
+        storedMedia.uri,
+        storedMedia.fileName,
+        mediaType,
+        controller.signal,
+      );
+      const socket = socketRef.current;
+      if (!socket?.connected) throw new Error(strings.tabs.chatConnectionError);
+
+      socket.emit('createMessage', {
+        adShortLink: pvId ?? adShortLink,
+        messageType: mediaType,
+        senderId: userId,
+        media: {
+          url: uploaded.fullUrl,
+          size: uploaded.size,
+          format: asset.mimeType?.split('/')[1] ?? mediaType,
+        },
+        ...(replyingTo ? { replyTo: replyingTo._id } : {}),
+      });
+      setReplyingTo(null);
+      setSelectedMessageId(null);
+    } catch (error) {
+      setSendError(getAuthErrorMessage(error, strings.tabs.chatSendError));
+    } finally {
+      if (storedMedia) {
+        try {
+          await deleteStoredMedia(storedMedia.key, storedMedia.uri);
+        } catch (error) {
+          setSendError(getAuthErrorMessage(error, strings.tabs.chatSendError));
+        }
+      }
+      setPendingUpload(null);
+      setIsUploadingMedia(false);
+      pickerLock.current = false;
+    }
+  };
+
+  const copyMessage = async (message: ChatMessage) => {
+    const text = message.content.text ?? message.content.media?.url;
+    if (!text) return;
+    try {
+      await Clipboard.setStringAsync(text);
+      setSelectedMessageId(null);
+      setActionNotice(strings.tabs.chatCopied);
+      setSendError('');
+    } catch (error) {
+      setSendError(getAuthErrorMessage(error, strings.tabs.chatSendError));
+    }
+  };
+
+  const confirmLocalDelete = () => {
+    if (!deleteTarget || String(deleteTarget.senderId) !== String(userId)) return;
+    setMessages((current) => current.filter((message) => message._id !== deleteTarget._id));
+    setDeleteTarget(null);
   };
 
   const imageUri =
@@ -321,6 +434,20 @@ export default function ChatConversationScreen({
                 message={item}
                 isMine={String(item.senderId) === String(userId)}
                 colors={colors}
+                menuVisible={selectedMessageId === item._id}
+                onPress={() =>
+                  setSelectedMessageId((current) => current === item._id ? null : item._id)
+                }
+                onCopy={() => void copyMessage(item)}
+                onReply={() => {
+                  setReplyingTo(item);
+                  setSelectedMessageId(null);
+                  setActionNotice('');
+                }}
+                onDelete={() => {
+                  setDeleteTarget(item);
+                  setSelectedMessageId(null);
+                }}
               />
             )}
           />
@@ -336,41 +463,124 @@ export default function ChatConversationScreen({
             {sendError}
           </Text>
         ) : null}
+        {actionNotice ? (
+          <Text style={[styles.actionNotice, { color: colors.primary }]}>{actionNotice}</Text>
+        ) : null}
         <View style={[styles.composer, { borderTopColor: colors.border }]}>
-          <TextInput
-            accessibilityLabel={strings.tabs.chatMessagePlaceholder}
-            editable={isConnected}
-            maxLength={2000}
-            multiline
-            onChangeText={setDraft}
-            onSubmitEditing={sendMessage}
-            placeholder={strings.tabs.chatMessagePlaceholder}
-            placeholderTextColor={colors.textSubtle}
-            returnKeyType="send"
-            style={[styles.input, { backgroundColor: colors.backgroundElement, color: colors.text }]}
-            textAlign="right"
-            value={draft}
-          />
-          <Pressable
-            accessibilityLabel={strings.tabs.chatSendAction}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !isConnected || !draft.trim() }}
-            disabled={!isConnected || !draft.trim()}
-            onPress={sendMessage}
-            style={({ pressed }) => [
-              styles.sendButton,
-              { backgroundColor: colors.primary },
-              (!isConnected || !draft.trim()) ? styles.disabled : null,
-              pressed ? styles.pressed : null,
-            ]}>
-            <SymbolView
-              name={{ ios: 'arrow.up', android: 'send', web: 'send' }}
-              size={20}
-              tintColor={colors.onPrimary}
+          {replyingTo ? (
+            <View style={[styles.replyPreview, { backgroundColor: colors.backgroundElement }]}>
+              <View style={styles.replyPreviewText}>
+                <Text style={[styles.replyPreviewLabel, { color: colors.primary }]}>
+                  {strings.tabs.chatReplyingTo}
+                </Text>
+                <Text numberOfLines={1} style={{ color: colors.textSecondary }}>
+                  {replyingTo.content.text ??
+                    (replyingTo.type === 'video'
+                      ? strings.tabs.chatVideoMessage
+                      : replyingTo.content.media
+                        ? strings.tabs.chatImageMessage
+                        : '')}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel={strings.tabs.chatCancel}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => setReplyingTo(null)}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={18}
+                  tintColor={colors.textSecondary}
+                />
+              </Pressable>
+            </View>
+          ) : null}
+          {pendingUpload ? (
+            <View style={styles.uploadPreview}>
+              {pendingUpload.type === 'image' ? (
+                <Image contentFit="cover" source={{ uri: pendingUpload.uri }} style={styles.uploadPreviewMedia} />
+              ) : (
+                <ChatVideo uri={pendingUpload.uri} preview />
+              )}
+              <View style={[styles.uploadOverlay, { backgroundColor: colors.overlay }]}>
+                <ActivityIndicator color={colors.onPrimary} />
+                <Text style={{ color: colors.onPrimary }}>{strings.tabs.chatUploadingMedia}</Text>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.composerRow}>
+            <Pressable
+              accessibilityLabel={strings.tabs.chatSendAction}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isConnected || !draft.trim() }}
+              disabled={!isConnected || !draft.trim()}
+              onPress={sendMessage}
+              style={({ pressed }) => [
+                styles.sendButton,
+                { backgroundColor: colors.primary },
+                (!isConnected || !draft.trim()) ? styles.disabled : null,
+                pressed ? styles.pressed : null,
+              ]}>
+              <SymbolView
+                name={{ ios: 'arrow.up', android: 'send', web: 'send' }}
+                size={20}
+                tintColor={colors.onPrimary}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={strings.tabs.chatPickMedia}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isConnected || isUploadingMedia }}
+              disabled={!isConnected || isUploadingMedia}
+              onPress={() => void pickAndUploadMedia()}
+              style={({ pressed }) => [styles.mediaButton, pressed ? styles.pressed : null]}>
+              <SymbolView
+                name={{ ios: 'paperclip', android: 'attach_file', web: 'attach_file' }}
+                size={21}
+                tintColor={colors.primary}
+              />
+            </Pressable>
+            <TextInput
+              accessibilityLabel={strings.tabs.chatMessagePlaceholder}
+              editable={isConnected}
+              maxLength={2000}
+              multiline
+              onChangeText={setDraft}
+              onSubmitEditing={sendMessage}
+              placeholder={strings.tabs.chatMessagePlaceholder}
+              placeholderTextColor={colors.textSubtle}
+              returnKeyType="send"
+              style={[styles.input, { backgroundColor: colors.backgroundElement, color: colors.text }]}
+              textAlign="left"
+              value={draft}
             />
-          </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={deleteTarget !== null}
+        onRequestClose={() => setDeleteTarget(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.deleteDialog, { backgroundColor: colors.background }]}>
+            <Text style={[styles.deleteTitle, { color: colors.text }]}>
+              {strings.tabs.chatDeleteLocalTitle}
+            </Text>
+            <Text style={[styles.deleteDescription, { color: colors.textSecondary }]}>
+              {strings.tabs.chatDeleteLocalDescription}
+            </Text>
+            <View style={styles.deleteActions}>
+              <Pressable onPress={() => setDeleteTarget(null)} style={styles.deleteAction}>
+                <Text style={{ color: colors.textSecondary }}>{strings.tabs.chatCancel}</Text>
+              </Pressable>
+              <Pressable onPress={confirmLocalDelete} style={styles.deleteAction}>
+                <Text style={{ color: colors.error }}>{strings.tabs.chatDeleteLocalConfirm}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -379,35 +589,122 @@ function MessageBubble({
   message,
   isMine,
   colors,
+  menuVisible,
+  onPress,
+  onCopy,
+  onReply,
+  onDelete,
 }: {
   message: ChatMessage;
   isMine: boolean;
   colors: (typeof Colors)[keyof typeof Colors];
+  menuVisible: boolean;
+  onPress: () => void;
+  onCopy: () => void;
+  onReply: () => void;
+  onDelete: () => void;
 }) {
   return (
     <View
       style={[
-        styles.messageBubble,
-        { backgroundColor: isMine ? colors.primary : colors.backgroundElement },
+        styles.messageRow,
         isMine ? styles.ownMessage : styles.otherMessage,
+        menuVisible ? styles.messageRowActive : null,
       ]}>
-      <Text style={{ color: isMine ? colors.onPrimary : colors.text, textAlign: 'right' }}>
-        {message.content.text ?? ''}
-      </Text>
-      <Text style={[styles.messageTime, { color: isMine ? colors.onPrimary : colors.textSubtle }]}>
-        {formatChatTime(message.createdAt)}
-      </Text>
-      {isMine ? (
-        <Text
-          accessibilityLabel={message.isRead ? 'پیام خوانده شد' : 'پیام خوانده نشد'}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={message.content.text ?? strings.tabs.chatReplyingTo}
+        onPress={onPress}
+        style={[
+          styles.messageBubble,
+          { backgroundColor: isMine ? '#3F3F46' : colors.backgroundElement },
+        ]}>
+        {message.repliedTo ? (
+          <View
+            style={[
+              styles.messageReplyQuote,
+              { borderRightColor: isMine ? colors.onPrimary : colors.primary },
+            ]}>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: isMine ? colors.onPrimary : colors.textSecondary,
+                fontSize: 11,
+                textAlign: 'right',
+              }}>
+              {message.repliedTo.content}
+            </Text>
+          </View>
+        ) : null}
+        {message.content.text ? (
+          <Text style={{ color: isMine ? colors.onPrimary : colors.text, textAlign: 'right' }}>
+            {message.content.text}
+          </Text>
+        ) : null}
+        {message.content.media ? (
+          message.type === 'video' ? (
+            <ChatVideo uri={message.content.media.url} />
+          ) : (
+            <Image
+              contentFit="cover"
+              source={{ uri: message.content.media.url }}
+              style={styles.messageMedia}
+            />
+          )
+        ) : null}
+        <View style={styles.messageMeta}>
+          {isMine ? (
+            <Text
+              accessibilityLabel={message.isRead ? 'پیام خوانده شد' : 'پیام خوانده نشد'}
+              style={[
+                styles.readStatus,
+                { color: message.isRead ? '#2F80ED' : '#D4D4D8' },
+              ]}>
+              {message.isRead ? '✓✓' : '✓'}
+            </Text>
+          ) : null}
+          <Text style={[styles.messageTime, { color: isMine ? '#E4E4E7' : colors.textSubtle }]}>
+            {formatChatTime(message.createdAt)}
+          </Text>
+        </View>
+      </Pressable>
+      {menuVisible ? (
+        <View
           style={[
-            styles.readStatus,
-            { color: message.isRead ? '#2F80ED' : colors.onPrimary },
+            styles.messageActions,
+            { backgroundColor: colors.background, borderColor: colors.border },
           ]}>
-          {message.isRead ? '✓✓' : '✓'}
-        </Text>
+          <Pressable accessibilityRole="button" onPress={onCopy} style={styles.messageAction}>
+            <Text style={{ color: colors.text }}>{strings.tabs.chatCopy}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onReply} style={styles.messageAction}>
+            <Text style={{ color: colors.text }}>{strings.tabs.chatReply}</Text>
+          </Pressable>
+          {isMine ? (
+            <Pressable accessibilityRole="button" onPress={onDelete} style={styles.messageAction}>
+              <Text style={{ color: colors.error }}>{strings.tabs.chatDelete}</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
     </View>
+  );
+}
+
+function ChatVideo({ uri, preview = false }: { uri: string; preview?: boolean }) {
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = preview;
+    videoPlayer.muted = preview;
+    if (preview) videoPlayer.play();
+  });
+
+  return (
+    <VideoView
+      contentFit="cover"
+      nativeControls={!preview}
+      player={player}
+      style={preview ? styles.uploadPreviewMedia : styles.messageMedia}
+    />
   );
 }
 
@@ -447,19 +744,46 @@ const styles = StyleSheet.create({
   messageList: { gap: Spacing.two, padding: Spacing.three },
   emptyMessages: { flexGrow: 1, justifyContent: 'center', padding: Spacing.three },
   emptyText: { fontSize: 14, textAlign: 'center' },
-  messageBubble: { borderRadius: 14, gap: Spacing.one, maxWidth: '84%', padding: Spacing.two },
-  ownMessage: { alignSelf: 'flex-end' },
-  otherMessage: { alignSelf: 'flex-start' },
-  messageTime: { fontSize: 10, textAlign: 'left' },
-  readStatus: { fontSize: 11, letterSpacing: -2, textAlign: 'left' },
-  sendError: { paddingHorizontal: Spacing.three, textAlign: 'right' },
-  composer: {
-    alignItems: 'flex-end',
-    borderTopWidth: StyleSheet.hairlineWidth,
+  messageRow: { maxWidth: '88%', position: 'relative' },
+  messageRowActive: { elevation: 10, zIndex: 10 },
+  ownMessage: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  otherMessage: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  messageBubble: { borderRadius: 14, gap: Spacing.one, maxWidth: '100%', padding: Spacing.two },
+  messageMedia: { borderRadius: 10, height: 190, width: 240 },
+  messageReplyQuote: { borderRightWidth: 2, paddingEnd: Spacing.two },
+  messageActions: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',
+    gap: Spacing.three,
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
+    transform: [{ translateY: -20 }],
+    zIndex: 20,
+    elevation: 12,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  messageAction: { paddingVertical: Spacing.one },
+  messageMeta: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: Spacing.one,
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+  messageTime: { fontSize: 10, textAlign: 'right' },
+  readStatus: { fontSize: 11, letterSpacing: -2 },
+  sendError: { paddingHorizontal: Spacing.three, textAlign: 'right' },
+  actionNotice: { paddingHorizontal: Spacing.three, textAlign: 'right' },
+  composer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
     gap: Spacing.two,
     padding: Spacing.two,
   },
+  composerRow: { alignItems: 'center', flexDirection: 'row-reverse', gap: Spacing.one },
   input: {
     borderRadius: 20,
     flex: 1,
@@ -471,7 +795,54 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     writingDirection: 'rtl',
   },
+  mediaButton: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 36,
+  },
   sendButton: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
+  replyPreview: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  replyPreviewText: { flex: 1, gap: Spacing.one },
+  replyPreviewLabel: { fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  uploadPreview: {
+    alignSelf: 'flex-end',
+    borderRadius: 12,
+    height: 132,
+    overflow: 'hidden',
+    width: 176,
+  },
+  uploadPreviewMedia: { height: '100%', width: '100%' },
+  uploadOverlay: {
+    alignItems: 'center',
+    bottom: 0,
+    flexDirection: 'row-reverse',
+    gap: Spacing.two,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: '#00000066',
+    flex: 1,
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  deleteDialog: { borderRadius: 16, gap: Spacing.three, maxWidth: 380, padding: Spacing.four, width: '100%' },
+  deleteTitle: { fontSize: 17, fontWeight: '600', textAlign: 'right' },
+  deleteDescription: { fontSize: 14, lineHeight: 22, textAlign: 'right' },
+  deleteActions: { flexDirection: 'row-reverse', gap: Spacing.four, justifyContent: 'flex-start' },
+  deleteAction: { paddingVertical: Spacing.one },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.75 },
 });
