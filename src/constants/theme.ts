@@ -27,6 +27,7 @@ export const Colors = {
     overlay: '#000000',
     error: '#C32E2E',
     success: '#15803D',
+    lightBlue : '#e8f3fe'
   },
   dark: {
     text: '#2A2A30',
@@ -47,6 +48,7 @@ export const Colors = {
     overlay: '#000000',
     error: '#C32E2E',
     success: '#15803D',
+    lightBlue : '#e8f3fe'
   },
 } as const;
 

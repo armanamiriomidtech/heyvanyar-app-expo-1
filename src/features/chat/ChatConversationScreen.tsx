@@ -24,23 +24,23 @@ import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, FontFamilies, Spacing } from '@/constants/theme';
 import { getAdDetails } from '@/features/ads/api';
-import { uploadChatMedia } from '@/features/ads/uploadApi';
 import {
   createMediaKey,
   deleteStoredMedia,
   savePickedMedia,
 } from '@/features/ads/mediaStorage';
+import { uploadChatMedia } from '@/features/ads/uploadApi';
 import { getAuthErrorMessage } from '@/features/auth/api';
-import { createChatSocket } from '@/features/chat/socket';
 import { formatChatTime } from '@/features/chat/format';
+import { createChatSocket } from '@/features/chat/socket';
 import {
   chatMessageSchema,
   chatMessagesResponseSchema,
   type ChatMessage,
 } from '@/features/chat/types';
 import { getCurrentUser } from '@/features/profile/api';
-import { readAuthSession, useAuthStore } from '@/store/authStore';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { readAuthSession, useAuthStore } from '@/store/authStore';
 
 interface ChatConversationScreenProps {
   adShortLink: string;
@@ -66,6 +66,7 @@ export default function ChatConversationScreen({
     enabled: Boolean(adShortLink),
     retry: false,
   });
+  console.log(adQuery, 'adQuery')
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -186,13 +187,13 @@ export default function ChatConversationScreen({
               current.map((message) =>
                 idSet.has(String(message._id))
                   ? {
-                      ...message,
-                      isRead: true,
-                      seenBy: [
-                        ...(message.seenBy ?? []),
-                        ...(seenBy ? [seenBy] : []),
-                      ],
-                    }
+                    ...message,
+                    isRead: true,
+                    seenBy: [
+                      ...(message.seenBy ?? []),
+                      ...(seenBy ? [seenBy] : []),
+                    ],
+                  }
                   : message,
               ),
             );
@@ -362,7 +363,7 @@ export default function ChatConversationScreen({
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
           <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
             size={22}
             tintColor={colors.text}
           />
@@ -375,7 +376,7 @@ export default function ChatConversationScreen({
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}>
-        <View style={[styles.adCard, { borderBottomColor: colors.border }]}>
+        <View style={[styles.adCard, { borderBottomColor: colors.border, backgroundColor: colors.backgroundElement }]}>
           {imageUri ? (
             <Image contentFit="cover" source={{ uri: imageUri }} style={styles.adImage} />
           ) : (
@@ -384,17 +385,17 @@ export default function ChatConversationScreen({
             </View>
           )}
           <View style={styles.adDetails}>
-            <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
+            {/* <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
               {strings.tabs.chatAdLabel}
-            </Text>
+            </Text> */}
             <Text numberOfLines={2} style={[styles.adTitle, { color: colors.text }]}>
               {adQuery.data?.title ?? (adQuery.isError ? strings.tabs.chatAdLoadingError : strings.common.loading)}
             </Text>
-            {adQuery.data ? (
+            {/* {adQuery.data ? (
               <Text style={[styles.adPrice, { color: colors.textSecondary }]}>
                 {new Intl.NumberFormat('fa-IR').format(Number(adQuery.data.price))} {strings.tabs.priceUnit}
               </Text>
-            ) : null}
+            ) : null} */}
           </View>
         </View>
 
@@ -617,7 +618,7 @@ function MessageBubble({
         onPress={onPress}
         style={[
           styles.messageBubble,
-          { backgroundColor: isMine ? '#3F3F46' : colors.backgroundElement },
+          { backgroundColor: isMine ? colors.lightBlue : colors.backgroundElement },
         ]}>
         {message.repliedTo ? (
           <View
@@ -628,7 +629,7 @@ function MessageBubble({
             <Text
               numberOfLines={2}
               style={{
-                color: isMine ? colors.onPrimary : colors.textSecondary,
+                color: isMine ? colors.text : colors.textSecondary,
                 fontSize: 11,
                 textAlign: 'right',
               }}>
@@ -637,7 +638,7 @@ function MessageBubble({
           </View>
         ) : null}
         {message.content.text ? (
-          <Text style={{ color: isMine ? colors.onPrimary : colors.text, textAlign: 'right' }}>
+          <Text style={{ color: isMine ? colors.text : colors.text, textAlign: 'right' }}>
             {message.content.text}
           </Text>
         ) : null}
@@ -658,12 +659,12 @@ function MessageBubble({
               accessibilityLabel={message.isRead ? 'پیام خوانده شد' : 'پیام خوانده نشد'}
               style={[
                 styles.readStatus,
-                { color: message.isRead ? '#2F80ED' : '#D4D4D8' },
+                { color: message.isRead ? colors.textSubtle : colors.textSubtle },
               ]}>
               {message.isRead ? '✓✓' : '✓'}
             </Text>
           ) : null}
-          <Text style={[styles.messageTime, { color: isMine ? '#E4E4E7' : colors.textSubtle }]}>
+          <Text style={[styles.messageTime, { color: isMine ? colors.textSubtle : colors.textSubtle }]}>
             {formatChatTime(message.createdAt)}
           </Text>
         </View>
@@ -724,15 +725,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',
-    gap: Spacing.three,
-    padding: Spacing.three,
+    gap: Spacing.two,
+    padding: Spacing.two,
   },
-  adImage: { borderRadius: 10, height: 76, width: 76 },
+  adImage: { borderRadius: 10, height: 40, width: 40 },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   adDetails: { flex: 1, gap: Spacing.one },
-  adLabel: { fontSize: 11, textAlign: 'right' },
-  adTitle: { fontSize: 14, fontWeight: '600', textAlign: 'right' },
-  adPrice: { fontSize: 12, textAlign: 'right' },
+  adTitle: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
   error: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, textAlign: 'right' },
   connectionError: {
     alignItems: 'center',
