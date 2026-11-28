@@ -122,8 +122,8 @@ export default function MyAdManagementScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.adManagementTitle}</Text>
         <BackToMyAdsButton colors={colors} />
+        <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.adManagementTitle}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         {isDeleted ? null : (
@@ -323,7 +323,7 @@ function BackToMyAdsButton({ colors }: { colors: (typeof Colors)[keyof typeof Co
       onPress={() => router.push('/my-ads')}
       style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
       <SymbolView
-        name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+        name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
         size={22}
         tintColor={colors.text}
       />
@@ -389,17 +389,17 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
   },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  title: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
   deletedNotice: { fontSize: 15, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   content: { flexGrow: 1, gap: Spacing.four, padding: Spacing.four },
   chartCard: { borderRadius: 14, gap: Spacing.two, padding: Spacing.three },
-  sectionTitle: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
-  totalViews: { fontSize: 28, fontWeight: '700', textAlign: 'right' },
+  sectionTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  totalViews: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
   chartCaption: { fontSize: 13, textAlign: 'right' },
   chartScroll: {  height: 150 },
   chartScrollContent: {  },

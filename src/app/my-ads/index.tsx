@@ -129,7 +129,7 @@ function MyAdRow({
         <Text numberOfLines={2} style={[styles.adTitle, { color: colors.text }]}>
           {ad.title}
         </Text>
-        <Text style={[styles.price, { color: colors.text }]}>
+        <Text style={[styles.price, { color: colors.textSecondary }]}>
           {price} {strings.tabs.priceUnit}
         </Text>
         {status ? (
@@ -177,7 +177,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row-reverse',
     minHeight: 56,
-    // paddingHorizontal: Spacing.three,
     gap: Spacing.two,
   },
   title: { fontSize: 16, fontWeight: '500', textAlign: 'right' },
@@ -196,9 +195,9 @@ const styles = StyleSheet.create({
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center', padding: Spacing.two },
   placeholderText: { fontSize: 12, textAlign: 'center' },
   adDetails: { alignItems: 'flex-end', flex: 1, gap: Spacing.one },
-  adTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
-  price: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
-  adStatus: { fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  adTitle: { fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  price: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
+  adStatus: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
   publishDetails: { fontSize: 11, textAlign: 'right' },
   separator: { backgroundColor: Colors.light.border, height: StyleSheet.hairlineWidth },
   pressed: { opacity: 0.7 },

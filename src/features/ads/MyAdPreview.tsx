@@ -808,7 +808,7 @@ const styles = StyleSheet.create({
   viewerImage: { height: '100%', width: '100%' },
   mediaPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   placeholderText: { fontSize: 14, textAlign: 'center' },
-  details: { gap: Spacing.two, padding: Spacing.four },
+  details: { gap: Spacing.two, padding: Spacing.three },
   mapSection: { gap: Spacing.two, marginTop: Spacing.two },
   mapCoordinates: { fontSize: 12, textAlign: 'right' },
   reportButton: {

@@ -88,11 +88,14 @@ export default function LoginScreen() {
           onPress={() => router.replace('/(tabs)')}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
           <SymbolView
-            name={{ ios: 'arrow.left', android: 'arrow_back', web: 'arrow_back' }}
-            size={24}
+            name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            size={22}
             tintColor={colors.text}
           />
         </Pressable>
+        <Text numberOfLines={1} style={[styles.headerTitle, { color: colors.text }]}>
+          {strings.auth.loginTitle}
+        </Text>
       </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -160,15 +163,25 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: {
     alignItems: 'center',
-    width: 60,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.four, // بالا/پایین بیشتر
+    flexDirection: 'row-reverse',
+    minHeight: 56,
+    paddingHorizontal: Spacing.three,
   },
+
   backButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 50,
+    height: 44,
+    width: 40,
+    flexShrink: 0,
+  },
+
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   scrollContent: {
     flexGrow: 1,

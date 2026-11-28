@@ -98,7 +98,7 @@ export default function VerifyScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
 
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <Pressable
           accessibilityLabel={strings.common.backToHome}
           accessibilityRole="button"
@@ -111,6 +111,23 @@ export default function VerifyScreen() {
             tintColor={colors.text}
           />
         </Pressable>
+      </View> */}
+      <View style={styles.header}>
+        <Pressable
+          accessibilityLabel={strings.common.backToHome}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => router.replace('/(tabs)')}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+          <SymbolView
+            name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
+            size={22}
+            tintColor={colors.text}
+          />
+        </Pressable>
+        <Text numberOfLines={1} style={[styles.headerTitle, { color: colors.text }]}>
+          {strings.auth.verifyTitle}
+        </Text>
       </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -220,15 +237,25 @@ export default function VerifyScreen() {
 const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
-    width: 60,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.four, // بالا/پایین بیشتر
+    flexDirection: 'row-reverse',
+    minHeight: 56,
+    paddingHorizontal: Spacing.three,
   },
+
   backButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 50,
+    height: 44,
+    width: 40,
+    flexShrink: 0,
+  },
+
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   flex: { flex: 1 },
   safeArea: { flex: 1 },
