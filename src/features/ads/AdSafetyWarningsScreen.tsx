@@ -14,10 +14,7 @@ export default function AdSafetyWarningsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {strings.tabs.adSafetyPageTitle}
-        </Text>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           accessibilityLabel={strings.tabs.adSafetyClose}
           accessibilityRole="button"
@@ -29,6 +26,10 @@ export default function AdSafetyWarningsScreen() {
             tintColor={colors.text}
           />
         </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          {strings.tabs.adSafetyPageTitle}
+        </Text>
+
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.guideTitle, { color: colors.text }]}>
@@ -76,6 +77,7 @@ function WarningSection({
               name={{ ios: 'exclamationmark.circle.fill', android: 'error', web: 'error' }}
               size={17}
               tintColor={colors.primary}
+              style={{ marginTop: 3 }}
             />
             <Text style={[styles.itemText, { color: colors.textSecondary }]}>{item}</Text>
           </View>
@@ -90,16 +92,17 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: { fontSize: 17, fontWeight: '600', textAlign: 'right' },
-  backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  headerTitle: { fontSize: 16, fontWeight: '600', textAlign: 'right' },
+  backButton: { alignItems: 'center', minHeight: 56, justifyContent: 'flex-start', width: 44, display: 'flex', flexDirection: 'row-reverse', paddingHorizontal: Spacing.two },
   content: { flexGrow: 1, gap: Spacing.four, padding: Spacing.four },
-  guideTitle: { fontSize: 18, fontWeight: '600', lineHeight: 30, textAlign: 'right' },
+  guideTitle: { fontSize: 14, fontWeight: '600', lineHeight: 30, textAlign: 'right' },
   section: { gap: Spacing.two },
-  sectionTitle: { fontSize: 15, fontWeight: '600', lineHeight: 26, textAlign: 'right' },
+  sectionTitle: { fontSize: 14, fontWeight: '500', lineHeight: 26, textAlign: 'right' },
   itemsCard: { borderRadius: 12, gap: Spacing.three, padding: Spacing.three },
   item: { alignItems: 'flex-start', flexDirection: 'row-reverse', gap: Spacing.two },
   itemText: { flex: 1, fontSize: 13, lineHeight: 24, textAlign: 'right' },

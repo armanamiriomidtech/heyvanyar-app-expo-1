@@ -214,7 +214,7 @@ export default function ChatListScreen() {
           onPress={() => router.replace('/(tabs)')}
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
           <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
             size={22}
             tintColor={colors.text}
           />
@@ -361,11 +361,11 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
   },
-  title: {flex: 1,  fontSize: 18, fontWeight: '500', textAlign: 'right' },
+  title: { flex: 1, fontSize: 16, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 40 },
   tabs: {
     flexDirection: 'row-reverse',
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '500' },
   listContent: { flexGrow: 1, paddingHorizontal: Spacing.three },
   chatRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',
     gap: Spacing.two,
@@ -389,10 +389,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   adImage: { borderRadius: 8, height: 40, width: 40 },
-  imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  imagePlaceholder: { alignItems: 'flex-start', justifyContent: 'flex-start' },
   chatDetails: { flex: 1, gap: Spacing.one },
   chatTitleLine: { alignItems: 'center', flexDirection: 'row-reverse', gap: Spacing.two },
-  adTitle: { flex: 1, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  adTitle: { flex: 1, fontSize: 14, fontWeight: '500', textAlign: 'right' },
   titleMeta: { alignItems: 'center', flexDirection: 'row', gap: Spacing.one },
   time: { fontSize: 11 },
   unreadBadge: {

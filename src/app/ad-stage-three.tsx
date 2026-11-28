@@ -279,11 +279,11 @@ export default function AdStageThreeScreen() {
           }}
           textColor={colors.text}
         />
-        {!hasCoordinates(details) && (
+        {/* {!hasCoordinates(details) && (
           <Text style={[styles.error, { color: colors.error }]}>
             {strings.tabs.adCoordinatesRequired}
           </Text>
-        )}
+        )} */}
 
         <View style={[styles.optionRow, { backgroundColor: colors.backgroundElement }]}>
           <Text style={[styles.optionLabel, { color: colors.text }]}>
@@ -383,9 +383,9 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
   },
   content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
-  sectionLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right' , marginTop: Spacing.two},
-  coordinateValue: { fontSize: 13, textAlign: 'right' },
+  title: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
+  sectionLabel: { fontSize: 14, fontWeight: '500', textAlign: 'right' , marginTop: Spacing.two},
+  coordinateValue: { fontSize: 12, textAlign: 'right' },
   optionRow: {
     alignItems: 'center',
     borderRadius: 10,
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     minHeight: 64,
     paddingHorizontal: Spacing.three,
   },
-  optionLabel: { flex: 1, fontSize: 15, textAlign: 'right' },
+  optionLabel: { flex: 1, fontSize: 14, textAlign: 'right' },
   footer: {
     borderTopColor: Colors.light.border,
     borderTopWidth: StyleSheet.hairlineWidth,

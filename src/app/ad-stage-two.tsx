@@ -193,11 +193,11 @@ export default function AdStageTwoScreen() {
               </Text>
               <Text style={[styles.locationArrow, { color: colors.textSecondary }]}>‹</Text>
             </Pressable>
-            {details.locationId == null ? (
+            {/* {details.locationId == null ? (
               <Text style={[styles.hint, { color: colors.error }]}>
                 {strings.tabs.adLocationRequired}
               </Text>
-            ) : null}
+            ) : null} */}
           </View>
 
           <View style={styles.field}>
@@ -236,11 +236,11 @@ export default function AdStageTwoScreen() {
                 {priceInWords}
               </Text>
             ) : null}
-            {priceLimitError ? (
+            {/* {priceLimitError ? (
               <Text style={[styles.hint, { color: colors.error }]}>
                 {strings.tabs.adPriceMaximumHint}
               </Text>
-            ) : null}
+            ) : null} */}
           </View>
 
           <View style={styles.field}>
@@ -342,13 +342,13 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
   },
   scrollContent: { flexGrow: 1, gap: Spacing.four, padding: Spacing.four },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  title: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
   field: { gap: Spacing.two },
-  label: { fontSize: 15, fontWeight: '500', textAlign: 'right' },
+  label: { fontSize: 14, fontWeight: '500', textAlign: 'right' },
   input: {
     borderRadius: 10,
     fontFamily: FontFamilies.regular,
-    fontSize: 15,
+    fontSize: 14,
     minHeight: 50,
     paddingHorizontal: Spacing.three,
     textAlign: 'right',
@@ -362,11 +362,11 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: Spacing.three,
   },
-  locationFieldText: { flex: 1, fontSize: 15, textAlign: 'right' },
+  locationFieldText: { flex: 1, fontSize: 14, textAlign: 'right' },
   locationArrow: { fontSize: 24, marginStart: Spacing.two },
   descriptionInput: { minHeight: 320, paddingTop: Spacing.three },
   priceInWords: { fontSize: 12, lineHeight: 20, textAlign: 'right' },
-  hint: { fontSize: 13, lineHeight: 20, textAlign: 'right' },
+  // hint: { fontSize: 12, lineHeight: 20, textAlign: 'right' },
   footer: {
     flexDirection: 'row',
     gap: Spacing.two,

@@ -20,21 +20,21 @@ import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import {
-  getAdDetails,
   getAdBookmarkStatus,
+  getAdDetails,
   getMyAds,
   toggleAdBookmark,
   type AdDetails,
   type AdMedia,
   type MyAd,
 } from '@/features/ads/api';
-import { LoginRequiredModal } from '@/features/auth/LoginRequiredModal';
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
 import { registerAdViewOnce } from '@/features/ads/viewTracking';
 import { getAuthErrorMessage } from '@/features/auth/api';
-import { getCurrentUser } from '@/features/profile/api';
+import { LoginRequiredModal } from '@/features/auth/LoginRequiredModal';
 import { NeshanMap } from '@/features/location/NeshanMap';
 import type { MapCoordinates } from '@/features/location/neshanMapUtils';
+import { getCurrentUser } from '@/features/profile/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/store/authStore';
 
@@ -232,7 +232,7 @@ export default function MyAdPreviewScreen({
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
           <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
             size={22}
             tintColor={colors.text}
           />
@@ -366,7 +366,7 @@ export default function MyAdPreviewScreen({
               tintColor={colors.textSecondary}
             />
           </Pressable>
-          <View>
+          <View style={[{ borderColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }]}>
             <AdDetailRow
               colors={colors}
               divider
@@ -389,6 +389,7 @@ export default function MyAdPreviewScreen({
               />
             ) : null}
           </View>
+          <Text style={[styles.descriptionTitle, { color: colors.text }]}>{strings.tabs.adReportDescriptionLabel}</Text>
           <Text style={[styles.description, { color: colors.text }]}>{ad.description}</Text>
           <View style={styles.mapSection}>
             {coordinate ? (
@@ -442,8 +443,8 @@ export default function MyAdPreviewScreen({
         </View>
       </ScrollView>
       {showDisabledContactActions &&
-      authStatus === 'authenticated' &&
-      currentUserQuery.isError ? (
+        authStatus === 'authenticated' &&
+        currentUserQuery.isError ? (
         <Text style={[styles.contactIdentityError, { color: colors.error }]}>
           {getAuthErrorMessage(currentUserQuery.error, strings.tabs.profileLoadingError)}
         </Text>
@@ -829,7 +830,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.one,
   },
   adDetailLabel: { fontSize: 13, textAlign: 'right' },
-  adDetailValue: { fontSize: 14, fontWeight: '500', textAlign: 'left' },
+  adDetailValue: { fontSize: 14, fontWeight: '400', textAlign: 'left' },
   safetyLink: {
     alignItems: 'center',
     borderRadius: 10,
@@ -838,7 +839,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: Spacing.three,
   },
-  safetyLinkText: { flex: 1, fontSize: 14, fontWeight: '500', textAlign: 'right' },
+  safetyLinkText: { flex: 1, fontSize: 14, fontWeight: '400', textAlign: 'right' },
   contactActions: {
     borderTopColor: Colors.light.border,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -859,7 +860,8 @@ const styles = StyleSheet.create({
   contactButtonText: { fontSize: 16, fontWeight: '500' },
   title: { fontSize: 16, fontWeight: '500', lineHeight: 27, textAlign: 'right' },
   publishedAt: { fontSize: 12, textAlign: 'right' },
-  description: { fontSize: 15, lineHeight: 27, textAlign: 'right' },
+  descriptionTitle: { fontSize: 15, fontWeight: '500', lineHeight: 27, textAlign: 'right', marginBottom: Spacing.three, marginTop: Spacing.three },
+  description: { fontSize: 14, lineHeight: 27, textAlign: 'right' },
   viewTrackingError: { fontSize: 12, textAlign: 'right' },
   messageHeader: {
     alignItems: 'center',

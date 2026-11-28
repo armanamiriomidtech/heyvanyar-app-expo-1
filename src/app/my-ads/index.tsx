@@ -1,16 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SymbolView } from 'expo-symbols';
 
 import { AppText as Text } from '@/components/app-text';
 import { strings } from '@/constants/strings';
 import { Colors, Spacing } from '@/constants/theme';
 import { getMyAds, type MyAd } from '@/features/ads/api';
-import { getAuthErrorMessage } from '@/features/auth/api';
 import { formatPersianRelativeTime } from '@/features/ads/relativeTime';
+import { getAuthErrorMessage } from '@/features/auth/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function MyAdsScreen() {
@@ -61,18 +61,18 @@ export default function MyAdsScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.myAdsMenu}</Text>
             <Pressable
               accessibilityLabel={strings.common.back}
               accessibilityRole="button"
-              onPress={() => router.push('/(tabs)/profile')} 
+              onPress={() => router.push('/(tabs)/profile')}
               style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}>
               <SymbolView
-                name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+                name={{ ios: 'chevron.right', android: 'arrow_forward', web: 'arrow_forward' }}
                 size={22}
                 tintColor={colors.icon}
               />
             </Pressable>
+            <Text style={[styles.title, { color: colors.text }]}>{strings.tabs.myAdsMenu}</Text>
           </View>
         }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -133,7 +133,7 @@ function MyAdRow({
           {price} {strings.tabs.priceUnit}
         </Text>
         {status ? (
-          <Text style={[styles.adStatus, { color: status.color , fontWeight: '500'}]}>
+          <Text style={[styles.adStatus, { color: status.color, fontWeight: '500' }]}>
             {status.label}
           </Text>
         ) : null}
@@ -176,8 +176,9 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     minHeight: 56,
+    // paddingHorizontal: Spacing.three,
+    gap: Spacing.two,
   },
   title: { fontSize: 16, fontWeight: '500', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', },

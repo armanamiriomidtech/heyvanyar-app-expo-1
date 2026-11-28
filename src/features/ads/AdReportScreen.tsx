@@ -119,7 +119,6 @@ export default function AdReportScreen() {
         </View>
       ) : null}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{strings.tabs.adReportTitle}</Text>
         <Pressable
           accessibilityLabel={strings.common.back}
           accessibilityRole="button"
@@ -130,7 +129,8 @@ export default function AdReportScreen() {
             size={22}
             tintColor={colors.text}
           />
-        </Pressable>
+        </Pressable><Text style={[styles.headerTitle, { color: colors.text }]}>{strings.tabs.adReportTitle}</Text>
+
       </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -275,16 +275,16 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     minHeight: 56,
     paddingHorizontal: Spacing.three,
   },
-  headerTitle: { fontSize: 18, fontWeight: '600', textAlign: 'right' },
+  headerTitle: { fontSize: 16, fontWeight: '600', textAlign: 'right' },
   backButton: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   content: { flexGrow: 1, gap: Spacing.three, padding: Spacing.four, paddingBottom: Spacing.three },
   successBanner: { marginHorizontal: Spacing.three, marginTop: Spacing.two, padding: Spacing.three, borderRadius: 10 },
   successMessage: { fontSize: 13, fontWeight: '500', lineHeight: 22, textAlign: 'right' },
-  sectionTitle: { fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  sectionTitle: { fontSize: 15, fontWeight: '500', textAlign: 'right' },
   reasonList: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.three },
   reasonOption: {
     alignItems: 'center',
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 50,
   },
-  submitButtonText: { fontSize: 15, fontWeight: '600' },
+  submitButtonText: { fontSize: 15, fontWeight: '500' },
   disabled: { opacity: 0.6 },
   pressed: { opacity: 0.75 },
 });

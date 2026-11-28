@@ -401,9 +401,7 @@ export default function AdsScreen() {
             </Text>
           </Pressable>
         </View>
-        <Text style={[styles.description, { color: colors.textSecondary }]}>
-          {strings.tabs.createAdDescription}
-        </Text>
+
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, styles.categoryTitle, { color: colors.text }]}>
@@ -669,7 +667,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
   },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'right' },
+  title: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
   headerCancelButton: {
     alignItems: 'center',
     borderRadius: 8,
@@ -678,10 +676,10 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: Spacing.three,
   },
-  headerCancelText: { fontSize: 13, fontWeight: '600' },
-  description: { fontSize: 15, lineHeight: 25, textAlign: 'right' },
+  headerCancelText: { fontSize: 13, fontWeight: '500' },
+  // description: { fontSize: 12, lineHeight: 25, textAlign: 'right' },
   section: { gap: Spacing.two },
-  categoryTitle: { fontSize: 16 },
+  categoryTitle: { fontSize: 14, fontWeight: '500', textAlign: 'right' },
   categoryInput: {
     alignItems: 'center',
     borderRadius: 10,
@@ -691,12 +689,12 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: Spacing.three,
   },
-  categoryInputText: { flex: 1, fontSize: 15, textAlign: 'right' },
+  categoryInputText: { flex: 1, fontSize: 14, textAlign: 'right' },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   photoSectionHeader: { flexDirection: 'row-reverse' },
-  sectionTitle: { fontSize: 18, fontWeight: '700', textAlign: 'right' },
+  sectionTitle: { fontSize: 14, fontWeight: '500', textAlign: 'right' },
   counter: { fontSize: 14 },
-  helper: { fontSize: 14, lineHeight: 22, textAlign: 'right' },
+  helper: { fontSize: 12, lineHeight: 22, textAlign: 'right' },
   photoList: { alignItems: 'flex-start', flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 },
   photoItem: { alignItems: 'center', gap: 3, minHeight: 104, position: 'relative', width: 92 },
   photoButton: {
@@ -772,8 +770,8 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   cancelButton: { borderWidth: 1 },
-  cancelText: { fontSize: 15, fontWeight: '600' },
-  continueText: { fontSize: 15, fontWeight: '700' },
+  cancelText: { fontSize: 15, fontWeight: '500' },
+  continueText: { fontSize: 15, fontWeight: '500' },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.55 },
   error: { lineHeight: 22, paddingHorizontal: Spacing.four, textAlign: 'right' },
