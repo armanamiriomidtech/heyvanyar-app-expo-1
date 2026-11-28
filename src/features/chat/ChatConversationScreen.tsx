@@ -16,6 +16,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  type ViewInstance,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Socket } from 'socket.io-client';
@@ -47,6 +48,20 @@ interface ChatConversationScreenProps {
   pvId?: string;
 }
 
+function createReplySnapshot(message: ChatMessage) {
+  return {
+    messageId: message._id,
+    content:
+      message.content.text ??
+      (message.type === 'video'
+        ? strings.tabs.chatVideoMessage
+        : message.content.media
+          ? strings.tabs.chatImageMessage
+          : ''),
+    senderId: String(message.senderId),
+  };
+}
+
 export default function ChatConversationScreen({
   adShortLink,
   pvId,
@@ -75,7 +90,10 @@ export default function ChatConversationScreen({
   const [sendError, setSendError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
+  const [messageMenuAnchorY, setMessageMenuAnchorY] = useState<number | null>(null);
+  const [messageMenuHeight, setMessageMenuHeight] = useState(0);
+  const [messageMenuViewportHeight, setMessageMenuViewportHeight] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{
     uri: string;
@@ -84,6 +102,7 @@ export default function ChatConversationScreen({
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const pickerLock = useRef(false);
   const socketRef = useRef<Socket | null>(null);
+  const messageListRef = useRef<FlatList<ChatMessage>>(null);
   const userId = userQuery.data?.id;
 
   useEffect(() => {
@@ -251,11 +270,11 @@ export default function ChatConversationScreen({
       adShortLink: pvId ?? adShortLink,
       messageType: 'text',
       senderId: userId,
-      ...(replyingTo ? { replyTo: replyingTo._id } : {}),
+      ...(replyingTo ? { repliedTo: createReplySnapshot(replyingTo) } : {}),
     });
     setDraft('');
     setReplyingTo(null);
-    setSelectedMessageId(null);
+    setSelectedMessage(null);
     setSendError('');
     setActionNotice('');
   };
@@ -310,10 +329,10 @@ export default function ChatConversationScreen({
           size: uploaded.size,
           format: asset.mimeType?.split('/')[1] ?? mediaType,
         },
-        ...(replyingTo ? { replyTo: replyingTo._id } : {}),
+        ...(replyingTo ? { repliedTo: createReplySnapshot(replyingTo) } : {}),
       });
       setReplyingTo(null);
-      setSelectedMessageId(null);
+      setSelectedMessage(null);
     } catch (error) {
       setSendError(getAuthErrorMessage(error, strings.tabs.chatSendError));
     } finally {
@@ -335,7 +354,7 @@ export default function ChatConversationScreen({
     if (!text) return;
     try {
       await Clipboard.setStringAsync(text);
-      setSelectedMessageId(null);
+      setSelectedMessage(null);
       setActionNotice(strings.tabs.chatCopied);
       setSendError('');
     } catch (error) {
@@ -349,9 +368,32 @@ export default function ChatConversationScreen({
     setDeleteTarget(null);
   };
 
+  const jumpToMessage = (messageId: string) => {
+    const index = messages.findIndex((message) => message._id === messageId);
+    if (index < 0) return;
+    messageListRef.current?.scrollToIndex({
+      index,
+      animated: true,
+      viewPosition: 0.5,
+    });
+  };
+
   const imageUri =
     adQuery.data?.mainImage?.url ??
     adQuery.data?.files?.find((file) => file.url)?.url;
+  const estimatedMessageMenuHeight =
+    selectedMessage && String(selectedMessage.senderId) === String(userId) ? 140 : 100;
+  const menuHeight = messageMenuHeight || estimatedMessageMenuHeight;
+  const messageMenuTop =
+    messageMenuAnchorY === null
+      ? 0
+      : Math.max(
+          Spacing.two,
+          Math.min(
+            messageMenuAnchorY - menuHeight / 2,
+            messageMenuViewportHeight - menuHeight - Spacing.two,
+          ),
+        );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -376,7 +418,20 @@ export default function ChatConversationScreen({
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}>
-        <View style={[styles.adCard, { borderBottomColor: colors.border, backgroundColor: colors.backgroundElement }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={adQuery.data?.title ?? strings.tabs.chatAdLabel}
+          onPress={() =>
+            router.push({
+              pathname: '/ad/[shortLink]',
+              params: { shortLink: adShortLink },
+            })
+          }
+          style={({ pressed }) => [
+            styles.adCard,
+            { borderBottomColor: colors.border, backgroundColor: colors.backgroundElement },
+            pressed ? styles.pressed : null,
+          ]}>
           {imageUri ? (
             <Image contentFit="cover" source={{ uri: imageUri }} style={styles.adImage} />
           ) : (
@@ -385,19 +440,11 @@ export default function ChatConversationScreen({
             </View>
           )}
           <View style={styles.adDetails}>
-            {/* <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
-              {strings.tabs.chatAdLabel}
-            </Text> */}
             <Text numberOfLines={2} style={[styles.adTitle, { color: colors.text }]}>
               {adQuery.data?.title ?? (adQuery.isError ? strings.tabs.chatAdLoadingError : strings.common.loading)}
             </Text>
-            {/* {adQuery.data ? (
-              <Text style={[styles.adPrice, { color: colors.textSecondary }]}>
-                {new Intl.NumberFormat('fa-IR').format(Number(adQuery.data.price))} {strings.tabs.priceUnit}
-              </Text>
-            ) : null} */}
           </View>
-        </View>
+        </Pressable>
 
         {socketError ? (
           <View style={styles.connectionError}>
@@ -420,11 +467,21 @@ export default function ChatConversationScreen({
 
         {historyLoaded ? (
           <FlatList
+            ref={messageListRef}
             data={messages}
             inverted
             keyExtractor={(item) => item._id}
             contentContainerStyle={messages.length ? styles.messageList : styles.emptyMessages}
             keyboardShouldPersistTaps="handled"
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              const list = messageListRef.current;
+              if (!list) return;
+              list.scrollToOffset({ offset: averageItemLength * index, animated: true });
+              setTimeout(
+                () => list.scrollToIndex({ index, animated: true, viewPosition: 0.5 }),
+                100,
+              );
+            }}
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                 {strings.tabs.chatNoMessages}
@@ -435,20 +492,13 @@ export default function ChatConversationScreen({
                 message={item}
                 isMine={String(item.senderId) === String(userId)}
                 colors={colors}
-                menuVisible={selectedMessageId === item._id}
-                onPress={() =>
-                  setSelectedMessageId((current) => current === item._id ? null : item._id)
-                }
-                onCopy={() => void copyMessage(item)}
-                onReply={() => {
-                  setReplyingTo(item);
-                  setSelectedMessageId(null);
-                  setActionNotice('');
+                onPress={(message, centerY) => {
+                  setMessageMenuAnchorY(centerY);
+                  setMessageMenuHeight(0);
+                  setMessageMenuViewportHeight(0);
+                  setSelectedMessage(message);
                 }}
-                onDelete={() => {
-                  setDeleteTarget(item);
-                  setSelectedMessageId(null);
-                }}
+                onRepliedToPress={jumpToMessage}
               />
             )}
           />
@@ -475,12 +525,7 @@ export default function ChatConversationScreen({
                   {strings.tabs.chatReplyingTo}
                 </Text>
                 <Text numberOfLines={1} style={{ color: colors.textSecondary }}>
-                  {replyingTo.content.text ??
-                    (replyingTo.type === 'video'
-                      ? strings.tabs.chatVideoMessage
-                      : replyingTo.content.media
-                        ? strings.tabs.chatImageMessage
-                        : '')}
+                  {createReplySnapshot(replyingTo).content}
                 </Text>
               </View>
               <Pressable
@@ -561,6 +606,66 @@ export default function ChatConversationScreen({
       <Modal
         animationType="fade"
         transparent
+        visible={selectedMessage !== null}
+        onRequestClose={() => setSelectedMessage(null)}>
+        <View
+          onLayout={(event) => setMessageMenuViewportHeight(event.nativeEvent.layout.height)}
+          style={styles.messageMenuBackdrop}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSelectedMessage(null)}
+            style={StyleSheet.absoluteFill}
+          />
+          {selectedMessage && messageMenuViewportHeight > 0 ? (
+            <View
+              pointerEvents="box-none"
+              style={[styles.messageMenuPosition, { top: messageMenuTop }]}>
+              <Pressable
+                onPress={() => setSelectedMessage(null)}
+                style={[
+                  styles.messageMenu,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ]}
+                onLayout={(event) => setMessageMenuHeight(event.nativeEvent.layout.height)}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    const message = selectedMessage;
+                    setSelectedMessage(null);
+                    void copyMessage(message);
+                  }}
+                  style={styles.messageAction}>
+                  <Text style={{ color: colors.text }}>{strings.tabs.chatCopy}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setReplyingTo(selectedMessage);
+                    setSelectedMessage(null);
+                    setActionNotice('');
+                  }}
+                  style={styles.messageAction}>
+                  <Text style={{ color: colors.text }}>{strings.tabs.chatReply}</Text>
+                </Pressable>
+                {String(selectedMessage.senderId) === String(userId) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setDeleteTarget(selectedMessage);
+                      setSelectedMessage(null);
+                    }}
+                    style={styles.messageAction}>
+                    <Text style={{ color: colors.error }}>{strings.tabs.chatDelete}</Text>
+                  </Pressable>
+                ) : null}
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+      <Modal
+        animationType="fade"
+        transparent
         visible={deleteTarget !== null}
         onRequestClose={() => setDeleteTarget(null)}>
         <View style={styles.modalBackdrop}>
@@ -590,38 +695,45 @@ function MessageBubble({
   message,
   isMine,
   colors,
-  menuVisible,
   onPress,
-  onCopy,
-  onReply,
-  onDelete,
+  onRepliedToPress,
 }: {
   message: ChatMessage;
   isMine: boolean;
   colors: (typeof Colors)[keyof typeof Colors];
-  menuVisible: boolean;
-  onPress: () => void;
-  onCopy: () => void;
-  onReply: () => void;
-  onDelete: () => void;
+  onPress: (message: ChatMessage, centerY: number) => void;
+  onRepliedToPress: (messageId: string) => void;
 }) {
+  const repliedTo = message.repliedTo;
+  const messageBubbleRef = useRef<ViewInstance>(null);
+
   return (
     <View
       style={[
         styles.messageRow,
         isMine ? styles.ownMessage : styles.otherMessage,
-        menuVisible ? styles.messageRowActive : null,
       ]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={message.content.text ?? strings.tabs.chatReplyingTo}
-        onPress={onPress}
+        ref={messageBubbleRef}
+        onPress={() => {
+          messageBubbleRef.current?.measureInWindow((_x, y, _width, height) => {
+            onPress(message, y + height / 2);
+          });
+        }}
         style={[
           styles.messageBubble,
           { backgroundColor: isMine ? colors.lightBlue : colors.backgroundElement },
         ]}>
-        {message.repliedTo ? (
-          <View
+        {repliedTo ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.tabs.chatReplyingTo}
+            onPress={(event) => {
+              event.stopPropagation();
+              onRepliedToPress(repliedTo.messageId);
+            }}
             style={[
               styles.messageReplyQuote,
               { borderRightColor: isMine ? colors.onPrimary : colors.primary },
@@ -633,9 +745,9 @@ function MessageBubble({
                 fontSize: 11,
                 textAlign: 'right',
               }}>
-              {message.repliedTo.content}
+              {repliedTo.content}
             </Text>
-          </View>
+          </Pressable>
         ) : null}
         {message.content.text ? (
           <Text style={{ color: isMine ? colors.text : colors.text, textAlign: 'right' }}>
@@ -669,25 +781,6 @@ function MessageBubble({
           </Text>
         </View>
       </Pressable>
-      {menuVisible ? (
-        <View
-          style={[
-            styles.messageActions,
-            { backgroundColor: colors.background, borderColor: colors.border },
-          ]}>
-          <Pressable accessibilityRole="button" onPress={onCopy} style={styles.messageAction}>
-            <Text style={{ color: colors.text }}>{strings.tabs.chatCopy}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={onReply} style={styles.messageAction}>
-            <Text style={{ color: colors.text }}>{strings.tabs.chatReply}</Text>
-          </Pressable>
-          {isMine ? (
-            <Pressable accessibilityRole="button" onPress={onDelete} style={styles.messageAction}>
-              <Text style={{ color: colors.error }}>{strings.tabs.chatDelete}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -744,28 +837,27 @@ const styles = StyleSheet.create({
   emptyMessages: { flexGrow: 1, justifyContent: 'center', padding: Spacing.three },
   emptyText: { fontSize: 14, textAlign: 'center' },
   messageRow: { maxWidth: '88%', position: 'relative' },
-  messageRowActive: { elevation: 10, zIndex: 10 },
   ownMessage: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   otherMessage: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   messageBubble: { borderRadius: 14, gap: Spacing.one, maxWidth: '100%', padding: Spacing.two },
   messageMedia: { borderRadius: 10, height: 190, width: 240 },
   messageReplyQuote: { borderRightWidth: 2, paddingEnd: Spacing.two },
-  messageActions: {
+  messageMenu: {
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row-reverse',
-    gap: Spacing.three,
-    position: 'absolute',
-    top: '50%',
-    alignSelf: 'center',
-    transform: [{ translateY: -20 }],
-    zIndex: 20,
-    elevation: 12,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    gap: Spacing.two,
+    minWidth: 136,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.three,
   },
-  messageAction: { paddingVertical: Spacing.one },
+  messageMenuPosition: {
+    alignItems: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  messageAction: { alignItems: 'center', paddingVertical: Spacing.two, width: '100%' },
   messageMeta: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
@@ -833,6 +925,12 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     alignItems: 'center',
     backgroundColor: '#00000066',
+    flex: 1,
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  messageMenuBackdrop: {
+    alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
     padding: Spacing.four,
